@@ -1,0 +1,48 @@
+# Local ERP + state database.
+#   docker compose up -d   -> Odoo at http://localhost:8069 (admin / admin)
+# First start initialises the "northwind" database with Sales + Invoicing;
+# that takes a few minutes. Watch with: docker compose logs -f odoo
+services:
+  odoo-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - odoo-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 5s
+      retries: 10
+
+  odoo:
+    image: odoo:17.0
+    depends_on:
+      odoo-db:
+        condition: service_healthy
+    ports:
+      - "8069:8069"
+    environment:
+      HOST: odoo-db
+      USER: odoo
+      PASSWORD: odoo
+    command: ["--database=northwind", "--init=sale_management,account", "--without-demo=all"]
+    volumes:
+      - odoo-data:/var/lib/odoo
+
+  state-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: o2c_state
+      POSTGRES_USER: o2c
+      POSTGRES_PASSWORD: o2c
+    ports:
+      - "5433:5432"
+    volumes:
+      - state-db-data:/var/lib/postgresql/data
+
+volumes:
+  odoo-db-data:
+  odoo-data:
+  state-db-data:

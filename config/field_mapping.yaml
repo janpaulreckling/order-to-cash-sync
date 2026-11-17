@@ -1,0 +1,43 @@
+# Salesforce -> canonical order model.
+#
+# This file is the contract between Sales Ops and Finance. Changing a mapping
+# is a config change reviewed in a PR, not a code change.
+#
+# A field is either a dotted path into the Salesforce record ("Account.Name")
+# or {path, transform}. Transforms are registered in o2c_sync/mapping.py.
+version: 1
+
+order:
+  external_id: Id
+  name: Name
+  close_date: CloseDate
+  expected_total: Amount
+  source_last_modified: {path: LastModifiedDate, transform: sf_datetime}
+  # Single-currency Developer Edition orgs have no CurrencyIsoCode field.
+  # Multi-currency orgs: uncomment and add the field to the SOQL query.
+  # currency: CurrencyIsoCode
+
+customer:
+  external_id: Account.Id
+  name: Account.Name
+  phone: Account.Phone
+
+billing_address:
+  street: Account.BillingStreet
+  city: Account.BillingCity
+  state: Account.BillingState
+  postal_code: Account.BillingPostalCode
+  country_code: {path: Account.BillingCountry, transform: country_iso2}
+
+line_items:
+  path: OpportunityLineItems.records
+  fields:
+    sku: Product2.ProductCode
+    description: Product2.Name
+    quantity: Quantity
+    unit_price: UnitPrice
+    discount_pct: Discount
+
+defaults:
+  currency: USD
+  country_code: US
