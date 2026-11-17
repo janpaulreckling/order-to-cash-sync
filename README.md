@@ -2,7 +2,7 @@
 
 > **Closed-won deals become ERP sales orders automatically, and invoice and payment status flow back to the sales rep, without anyone re-keying data.**
 
-[![CI](https://github.com/2zknf6t7d4-gif/order-to-cash-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/2zknf6t7d4-gif/order-to-cash-sync/actions/workflows/ci.yml)
+[![CI](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 
 ![A deal won in Salesforce becomes an ERP order in one sync run; bad records are parked in the dead-letter queue](docs/img/demo.gif)
@@ -86,7 +86,7 @@ These are the parts I would want to discuss in a design review:
 Requires Python 3.11+, [uv](https://docs.astral.sh/uv/) and Docker.
 
 ```bash
-git clone https://github.com/2zknf6t7d4-gif/order-to-cash-sync && cd order-to-cash-sync
+git clone https://github.com/janpaulreckling/order-to-cash-sync && cd order-to-cash-sync
 uv sync
 docker compose up -d          # Odoo 17 + Postgres
 uv run python scripts/seed_odoo.py   # company + product master from config/product_catalog.csv
@@ -164,4 +164,4 @@ tests/
 
 ## Related
 
-Part of a portfolio that models the back office of a fictional outdoor retailer, *Northwind Outfitters*. The invoices produced here feed the [cash-reconciliation-engine](https://github.com/2zknf6t7d4-gif/cash-reconciliation-engine).
+Part of a portfolio that models the back office of a fictional outdoor retailer, *Northwind Outfitters*. The invoices produced here feed the [cash-reconciliation-engine](https://github.com/janpaulreckling/cash-reconciliation-engine).
