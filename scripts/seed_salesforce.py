@@ -8,6 +8,8 @@ Creates, through the real REST API and idempotently (safe to re-run):
 - opportunities with line items: most Closed Won, one still open, one Closed Lost
 - ~6 months of generated order history (deterministic, anchored to a fixed date, so
   every re-run produces the same deals) for the analytics layer
+- an additive holdout batch ("Holdout Reorder #01-25") invoiced Nov 1-15 and never paid,
+  so the reconciliation project can measure matching quality on cases it was not tuned on
 - an additive fall-volume batch (Oct 15 - Nov 14) so the November close has a realistic
   number of open invoices for the sibling cash-reconciliation project; its own RNG, so
   adding it never changes the deals above
@@ -172,6 +174,48 @@ def volume_opportunities() -> list[tuple[str, str, str, int, list[tuple[str, int
     return deals
 
 
+HOLDOUT_TAG = "Holdout Reorder"
+# (account, lines) per deal. Deliberate shapes for the matcher: four customers with
+# 3+ open invoices, one customer with two invoices of the same amount, small amounts.
+HOLDOUT_SPEC: list[tuple[str, list[tuple[str, int, float]]]] = [
+    ("Lone Star Basecamp", [("TENT-4P", 4, 465.52)]),
+    ("Lone Star Basecamp", [("LAMP-HEAD", 8, 35.10)]),                       # small
+    ("Lone Star Basecamp", [("STOVE-1", 12, 69.52), ("FILTER-H2O", 6, 89.10)]),
+    ("Lone Star Basecamp", [("FILTER-H2O", 10, 87.12)]),
+    ("Hudson Valley Camping Co.", [("BAG-20F", 6, 263.12)]),
+    ("Hudson Valley Camping Co.", [("BAG-20F", 6, 263.12)]),                 # same amount
+    ("Hudson Valley Camping Co.", [("STOVE-1", 5, 71.10)]),                  # small
+    ("Hudson Valley Camping Co.", [("TENT-4P", 3, 476.10), ("STOVE-1", 6, 71.10)]),
+    ("Sierra Summit Sports", [("PACK-65L", 7, 233.10)]),
+    ("Sierra Summit Sports", [("TENT-2P", 9, 307.12)]),
+    ("Sierra Summit Sports", [("PAD-INSUL", 3, 116.10)]),                    # small
+    ("Green Mountain Gear Exchange", [("JACKET-RAIN", 14, 148.72)]),
+    ("Green Mountain Gear Exchange", [("PAD-INSUL", 12, 113.52)]),
+    ("Green Mountain Gear Exchange", [("BAG-20F", 4, 269.10)]),
+]
+HOLDOUT_FILL = 25 - len(HOLDOUT_SPEC)  # the rest: other customers, generated
+
+
+def holdout_opportunities() -> list[tuple[str, str, str, int, list[tuple[str, int, float]]]]:
+    rng = random.Random("holdout-2026")
+    with CATALOG.open(newline="") as fh:
+        list_price = {row["sku"]: float(row["list_price"]) for row in csv.DictReader(fh)}
+    others = [a for a in SEGMENTS if a not in {acct for acct, _ in HOLDOUT_SPEC}]
+    spec = list(HOLDOUT_SPEC)
+    for i in range(HOLDOUT_FILL):
+        account = others[i % len(others)]
+        sku = rng.choice(SEGMENTS[account][1])
+        qty = rng.randint(2, 5) if list_price[sku] > 500 else rng.randint(5, 25)
+        spec.append((account, [(sku, qty, round(list_price[sku] * 0.9, 2))]))
+    deals = []
+    for n, (account, lines) in enumerate(spec, start=1):
+        close = date(2026, 10, 30) + timedelta(days=rng.randrange(0, 14))  # invoiced Nov 1-15
+        short = SEGMENTS[account][0]
+        deals.append((f"{short} - {HOLDOUT_TAG} #{n:02d}", account, "Closed Won",
+                      (date.today() - close).days, lines))
+    return deals
+
+
 def connect(s: Settings) -> Salesforce:
     if s.sf_cli_org:
         return sf_cli_session(s.sf_cli_org)
@@ -239,7 +283,8 @@ def seed_opportunities(sf: Salesforce, accounts: dict[str, str], pbes: dict[str,
     std = find_one(sf, "SELECT Id FROM Pricebook2 WHERE IsStandard = true")
     assert std
     created = 0
-    deals = OPPORTUNITIES + history_opportunities() + volume_opportunities()
+    deals = (OPPORTUNITIES + history_opportunities() + volume_opportunities()
+             + holdout_opportunities())
     for name, account, stage, days_ago, lines in deals:
         if find_one(sf, f"SELECT Id FROM Opportunity WHERE Name = '{q(name)}'"):
             continue  # never rewrite existing deals: that would re-trigger the sync

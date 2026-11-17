@@ -37,6 +37,10 @@ PROFILE = {"Pacific Crest Provisions": "fast", "Blue Ridge Outfitters": "fast",
            "Sierra Summit Sports": "fast", "Desert Sky Expeditions": "slow",
            "Lone Star Basecamp": "slow", "Hudson Valley Camping Co.": "late"}
 CREDITED_CUSTOMER = "Twin Cities Trailhead"
+# Holdout deals are invoiced inside the November window and never paid: the
+# reconciliation project measures matching quality on them.
+HOLDOUT_TAG = "Holdout Reorder"
+HOLDOUT_WINDOW = (date(2026, 11, 1), date(2026, 11, 15))
 
 
 class Odoo:
@@ -87,7 +91,7 @@ def main() -> None:
                                                  fields=["name"])}
     orders = odoo("sale.order", "search_read", [("client_order_ref", "!=", False)],
                   fields=["id", "name", "state", "amount_total", "client_order_ref",
-                          "partner_id", "invoice_ids"])
+                          "partner_id", "invoice_ids", "origin"])
     # Oldest deals first, so invoice numbers ascend with the invoice date.
     orders.sort(key=lambda o: (closes.get(o["client_order_ref"], today), o["id"]))
     credited_done = False
@@ -100,6 +104,11 @@ def main() -> None:
         customer = order["partner_id"][1]
         oid, total = order["id"], Decimal(str(order["amount_total"])).quantize(CENT)
         p = plan(order["name"], customer, close, total)
+        holdout = HOLDOUT_TAG in (order["origin"] or "")
+        if holdout:
+            lo, hi = HOLDOUT_WINDOW
+            p["invoice_date"] = min(max(close + timedelta(days=2), lo), hi)
+            p["installments"] = []
 
         # Finance maintains the customer's payment terms in the ERP.
         term_id = term_ids[TERMS.get(customer, DEFAULT_TERM)]

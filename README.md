@@ -25,7 +25,7 @@
 
 | At a glance (measured in the demo run) | |
 |---|---|
-| **112** won deals turned into ERP orders automatically | **0** duplicate orders, even when a run is repeated |
+| **137** won deals turned into ERP orders automatically | **0** duplicate orders, even when a run is repeated |
 | **4** business rules enforced in code | **2** problem records held back for a person to review |
 | **45** tests, CI on Python 3.11 and 3.12 | **5** issues found by testing against live systems, all fixed |
 
@@ -166,7 +166,7 @@ The engine is tested against in-memory fakes of both systems. The tests cover id
 
 The SQL models have their own tests on a small hand-checkable raw layer: credit notes are not cash, lost deals and draft invoices are excluded, aging buckets, and the reconciliation finding a missing deal along with its dead-letter reason.
 
-The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker. 112 won deals synced, with open and lost deals filtered out. Paid, Partially Paid, Invoiced and Credited were written back. A full rebuild from an empty ERP produced no duplicates. Running live surfaced five issues that the fakes could not:
+The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker. 137 won deals synced, with open and lost deals filtered out. Paid, Partially Paid, Invoiced and Credited were written back. A full rebuild from an empty ERP produced no duplicates. Running live surfaced five issues that the fakes could not:
 
 1. Sub-cent unit prices after quantity edits, caught by the post-write total check.
 2. A reversed invoice that read as Paid. Credit notes are now netted.
