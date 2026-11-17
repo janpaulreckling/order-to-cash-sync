@@ -23,17 +23,17 @@
 
 *These are real screens from a Salesforce Developer Edition org and Odoo 17.*
 
-| At a glance | |
+| At a glance (measured in the demo run) | |
 |---|---|
 | **112** won deals turned into ERP orders automatically | **0** duplicate orders, even when a run is repeated |
 | **4** business rules enforced in code | **2** problem records held back for a person to review |
-| **45** tests, CI on Python 3.11 and 3.12 | **5** real bugs found by running against live systems |
+| **45** tests, CI on Python 3.11 and 3.12 | **5** issues found by testing against live systems, all fixed |
 
 ## The business problem
 
 In most mid-market companies the handoff from Sales to Finance is a person with two browser tabs. A deal closes in Salesforce, and someone in Order Management re-types the customer, products, quantities and prices into the ERP. That step causes three problems:
 
-| Pain | Typical impact |
+| Pain | Typical impact (illustrative, not measured) |
 |---|---|
 | **Manual re-keying** | 10–15 min per order. At 400 orders/month that is ~80 hours a month |
 | **Data-entry errors** | Wrong quantity or price leads to wrong invoice, credit note and an annoyed customer |
@@ -166,7 +166,7 @@ The engine is tested against in-memory fakes of both systems. The tests cover id
 
 The SQL models have their own tests on a small hand-checkable raw layer: credit notes are not cash, lost deals and draft invoices are excluded, aging buckets, and the reconciliation finding a missing deal along with its dead-letter reason.
 
-The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker. 112 won deals synced, with open and lost deals filtered out. Paid, Partially Paid, Invoiced and Credited were written back. A full rebuild from an empty ERP produced no duplicates. Running live surfaced five bugs that the fakes could not:
+The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker. 112 won deals synced, with open and lost deals filtered out. Paid, Partially Paid, Invoiced and Credited were written back. A full rebuild from an empty ERP produced no duplicates. Running live surfaced five issues that the fakes could not:
 
 1. Sub-cent unit prices after quantity edits, caught by the post-write total check.
 2. A reversed invoice that read as Paid. Credit notes are now netted.
