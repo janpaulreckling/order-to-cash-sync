@@ -14,7 +14,6 @@ dependencies = [
     "tenacity>=8.3",
     "typer>=0.12",
     "rich>=13.7",
-    "duckdb>=2.0.0",
 ]
 
 [dependency-groups]
@@ -24,10 +23,16 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
     "types-PyYAML",
+    "duckdb>=2.0.0",
 ]
 
 [project.scripts]
 o2c = "o2c_sync.cli:app"
+
+[project.optional-dependencies]
+analytics = [
+    "duckdb>=2.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]

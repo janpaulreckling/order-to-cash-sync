@@ -95,7 +95,7 @@ uv run o2c sync
 uv run python scripts/simulate_finance.py  # Finance invoices and books payments in Odoo
 uv run o2c sync               # invoice/payment status flows back to Salesforce
 uv run o2c status
-uv run python analytics/build.py   # extract -> SQL models -> analytics/dashboard.html
+uv sync --extra analytics && uv run python analytics/build.py   # extract -> SQL models -> dashboard
 ```
 
 Salesforce setup (free Developer Edition, OAuth via the Salesforce CLI, custom fields as deployable metadata): see [docs/salesforce_setup.md](docs/salesforce_setup.md).

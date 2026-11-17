@@ -1,5 +1,6 @@
 """Order-to-cash analytics: extract from the live systems, model in SQL, render a dashboard.
 
+    uv sync --extra analytics                   # DuckDB is not needed by the sync itself
     uv run python analytics/build.py            # extract + models + dashboard
     uv run python analytics/build.py --no-extract   # re-run models on the last extract
 
