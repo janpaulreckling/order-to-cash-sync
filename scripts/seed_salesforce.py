@@ -6,11 +6,14 @@ Creates, through the real REST API and idempotently (safe to re-run):
   with it demonstrates the "ERP owns the product master" dead-letter path
 - wholesale customer accounts (US outdoor retailers)
 - opportunities with line items: most Closed Won, one still open, one Closed Lost
+- ~6 months of generated order history (deterministic, anchored to a fixed date, so
+  every re-run produces the same deals) for the analytics layer
 
 Usage: uv run python scripts/seed_salesforce.py
 """
 
 import csv
+import random
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -45,6 +48,24 @@ ACCOUNTS = [
     {"Name": "Hudson Valley Camping Co.", "Phone": "(845) 555-0175",
      "BillingStreet": "301 Wall St", "BillingCity": "Kingston", "BillingStateCode": "NY",
      "BillingPostalCode": "12401", "BillingCountryCode": "US"},
+    {"Name": "Green Mountain Gear Exchange", "Phone": "(802) 555-0131",
+     "BillingStreet": "88 Church St", "BillingCity": "Burlington", "BillingStateCode": "VT",
+     "BillingPostalCode": "05401", "BillingCountryCode": "US"},
+    {"Name": "Lone Star Basecamp", "Phone": "(512) 555-0158",
+     "BillingStreet": "600 Congress Ave", "BillingCity": "Austin", "BillingStateCode": "TX",
+     "BillingPostalCode": "78701", "BillingCountryCode": "US"},
+    {"Name": "Pacific Crest Provisions", "Phone": "(503) 555-0194",
+     "BillingStreet": "1001 SW 5th Ave", "BillingCity": "Portland", "BillingStateCode": "OR",
+     "BillingPostalCode": "97204", "BillingCountryCode": "US"},
+    {"Name": "Sierra Summit Sports", "Phone": "(530) 555-0112",
+     "BillingStreet": "10100 Donner Pass Rd", "BillingCity": "Truckee", "BillingStateCode": "CA",
+     "BillingPostalCode": "96161", "BillingCountryCode": "US"},
+    {"Name": "Chesapeake Kayak Outfitters", "Phone": "(410) 555-0147",
+     "BillingStreet": "120 Compromise St", "BillingCity": "Annapolis", "BillingStateCode": "MD",
+     "BillingPostalCode": "21401", "BillingCountryCode": "US"},
+    {"Name": "Twin Cities Trailhead", "Phone": "(612) 555-0183",
+     "BillingStreet": "250 Marquette Ave", "BillingCity": "Minneapolis", "BillingStateCode": "MN",
+     "BillingPostalCode": "55401", "BillingCountryCode": "US"},
 ]
 
 # (opportunity name, account, stage, days ago closed, [(sku, qty, unit price)])
@@ -68,6 +89,59 @@ OPPORTUNITIES: list[tuple[str, str, str, int, list[tuple[str, int, float]]]] = [
     ("Cascade - Paddle Upgrade", "Cascade Paddle Co.", "Closed Lost", 12,
      [("PADDLE-CF", 20, 205.00)]),  # lost: must not sync
 ]
+
+
+# ------------------------------------------------------------- generated history
+HISTORY_ANCHOR = date(2026, 11, 16)  # fixed, so re-runs on later days create no new deals
+HISTORY_START = date(2026, 5, 1)
+SEGMENTS = {  # account -> (short name, product mix, orders per month)
+    "Rocky Mountain Trail Supply": ("RMTS", ["TENT-2P", "PACK-45L", "STOVE-1", "BAG-20F"], 1.4),
+    "Cascade Paddle Co.": ("Cascade", ["KAYAK-X", "PADDLE-CF", "JACKET-RAIN"], 0.9),
+    "Blue Ridge Outfitters": ("Blue Ridge", ["TENT-4P", "LAMP-HEAD", "FILTER-H2O"], 1.2),
+    "Great Lakes Adventure Gear": ("Great Lakes", ["JACKET-RAIN", "PACK-45L", "LAMP-HEAD"], 1.0),
+    "Desert Sky Expeditions": ("Desert Sky", ["PACK-65L", "FILTER-H2O", "LAMP-HEAD"], 0.8),
+    "Hudson Valley Camping Co.": ("Hudson Valley", ["TENT-4P", "BAG-20F", "STOVE-1"], 1.0),
+    "Green Mountain Gear Exchange": ("Green Mtn", ["BAG-20F", "PAD-INSUL", "JACKET-RAIN"], 0.7),
+    "Lone Star Basecamp": ("Lone Star", ["TENT-4P", "STOVE-1", "FILTER-H2O", "LAMP-HEAD"], 1.1),
+    "Pacific Crest Provisions": ("Pacific Crest", ["PACK-65L", "TENT-2P", "PAD-INSUL"], 1.3),
+    "Sierra Summit Sports": ("Sierra", ["BAG-20F", "TENT-2P", "PACK-65L"], 0.9),
+    "Chesapeake Kayak Outfitters": ("Chesapeake", ["KAYAK-X", "PADDLE-CF"], 0.6),
+    "Twin Cities Trailhead": ("Twin Cities", ["JACKET-RAIN", "LAMP-HEAD", "STOVE-1"], 0.8),
+}
+# Outdoor retail buys ahead of the summer season and again before the holidays.
+SEASONALITY = {5: 1.3, 6: 1.2, 7: 0.9, 8: 0.8, 9: 0.9, 10: 1.1, 11: 1.0}
+PROGRAMS = {5: "Summer Kickoff", 6: "Peak Season Refill", 7: "Midsummer Refill",
+            8: "Back-to-School", 9: "Fall Camping", 10: "Holiday Pre-Book", 11: "Winter Restock"}
+
+
+def history_opportunities() -> list[tuple[str, str, str, int, list[tuple[str, int, float]]]]:
+    rng = random.Random(20261116)
+    with CATALOG.open(newline="") as fh:
+        list_price = {row["sku"]: float(row["list_price"]) for row in csv.DictReader(fh)}
+    deals = []
+    for account, (short, mix, per_month) in SEGMENTS.items():
+        seq = 0
+        month = HISTORY_START
+        while month <= HISTORY_ANCHOR:
+            expected = per_month * SEASONALITY[month.month]
+            count = int(expected) + (rng.random() < expected % 1)
+            for _ in range(count):
+                close = month + timedelta(days=rng.randrange(0, 28))
+                if close > HISTORY_ANCHOR - timedelta(days=1):
+                    continue
+                seq += 1
+                skus = rng.sample(mix, k=rng.randint(1, min(3, len(mix))))
+                lines = []
+                for sku in skus:
+                    big = list_price[sku] > 500
+                    qty = rng.randint(2, 8) if big else rng.randint(8, 48)
+                    discount = rng.choice([0.08, 0.10, 0.12, 0.15])  # wholesale tiers
+                    lines.append((sku, qty, round(list_price[sku] * (1 - discount), 2)))
+                stage = "Closed Lost" if rng.random() < 0.12 else "Closed Won"
+                name = f"{short} - {PROGRAMS[month.month]} #{seq:02d}"
+                deals.append((name, account, stage, (date.today() - close).days, lines))
+            month = (month.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return deals
 
 
 def connect(s: Settings) -> Salesforce:
@@ -137,7 +211,8 @@ def seed_opportunities(sf: Salesforce, accounts: dict[str, str], pbes: dict[str,
     std = find_one(sf, "SELECT Id FROM Pricebook2 WHERE IsStandard = true")
     assert std
     created = 0
-    for name, account, stage, days_ago, lines in OPPORTUNITIES:
+    deals = OPPORTUNITIES + history_opportunities()
+    for name, account, stage, days_ago, lines in deals:
         if find_one(sf, f"SELECT Id FROM Opportunity WHERE Name = '{q(name)}'"):
             continue  # never rewrite existing deals: that would re-trigger the sync
         close = (date.today() - timedelta(days=days_ago)).isoformat()
@@ -153,7 +228,7 @@ def seed_opportunities(sf: Salesforce, accounts: dict[str, str], pbes: dict[str,
         if stage != "Prospecting":
             sf.Opportunity.update(opp_id, {"StageName": stage})  # type: ignore[operator]
         created += 1
-    print(f"opportunities: {created} created, {len(OPPORTUNITIES) - created} already present")
+    print(f"opportunities: {created} created, {len(deals) - created} already present")
 
 
 def main() -> None:

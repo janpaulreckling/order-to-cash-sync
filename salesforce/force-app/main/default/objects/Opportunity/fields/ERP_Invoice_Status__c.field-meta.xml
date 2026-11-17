@@ -14,6 +14,7 @@
             <value><fullName>Invoiced</fullName><default>false</default><label>Invoiced</label></value>
             <value><fullName>Partially Paid</fullName><default>false</default><label>Partially Paid</label></value>
             <value><fullName>Paid</fullName><default>false</default><label>Paid</label></value>
+            <value><fullName>Credited</fullName><default>false</default><label>Credited</label></value>
         </valueSetDefinition>
     </valueSet>
 </CustomField>

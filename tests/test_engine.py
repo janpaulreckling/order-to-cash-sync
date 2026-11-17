@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from o2c_sync.engine import ORDER_STREAM, STATUS_STREAM
+from o2c_sync.errors import PermanentError
 from o2c_sync.models import ErpOrderStatus, InvoiceStatus
 from o2c_sync.state import StateStore
 from tests.conftest import FakeCRM, FakeERP, opportunity
@@ -156,3 +157,74 @@ def test_writeback_pushes_status_once(make_engine, store) -> None:
 
     assert crm.status_updates == [paid]
     assert store.get_watermark(STATUS_STREAM) == paid.updated_at
+
+
+def _status(opp: str, ref: str, minute: int, status: InvoiceStatus = InvoiceStatus.PAID,
+            due: str = "0.00") -> ErpOrderStatus:
+    return ErpOrderStatus(external_id=opp, erp_order_ref=ref, invoice_status=status,
+                          amount_due=Decimal(due),
+                          updated_at=datetime(2026, 11, 5, 12, minute, tzinfo=UTC))
+
+
+class FlakyCRM(FakeCRM):
+    """Write-back fails for the listed Opportunity Ids."""
+
+    def __init__(self, records, failing: set[str]):  # type: ignore[no-untyped-def]
+        super().__init__(records)
+        self.failing = failing
+
+    def update_order_status(self, status: ErpOrderStatus) -> None:
+        if status.external_id in self.failing:
+            raise PermanentError("FIELD_CUSTOM_VALIDATION_EXCEPTION")
+        super().update_order_status(status)
+
+
+def test_writeback_failure_does_not_overwrite_parked_order(make_engine, store) -> None:
+    # OPP_A is parked as a conflict; then its write-back fails too.
+    crm = FlakyCRM([opportunity(OPP_A)], failing={OPP_A})
+    engine, erp = make_engine(crm)
+    engine.run(writeback=False)
+    erp.orders[OPP_A]["state"] = "sale"
+    crm.records = [opportunity(OPP_A, lines=[("TENT-2P", 5, 349.0)],
+                               modified="2026-11-03T10:00:00.000+0000")]
+    erp.statuses = [_status(OPP_A, "S00001", 0)]
+
+    engine.run()
+
+    lanes = {d.stage: d for d in store.open_dead_letters()}
+    assert set(lanes) == {"conflict", "writeback"}
+    assert lanes["conflict"].payload["Id"] == OPP_A  # CRM payload kept for review
+    assert engine.replay_dead_letters().failed == 1  # conflict still replayable
+
+
+def test_failed_writeback_is_retried_on_next_run(make_engine, store) -> None:
+    crm = FlakyCRM([], failing={OPP_A})
+    engine, erp = make_engine(crm)
+    first, second = _status(OPP_A, "S00001", 0), _status(OPP_B, "S00002", 5)
+    erp.statuses = [first, second]
+
+    engine.run()
+    # B still goes through, but the watermark stays before A's failure.
+    assert crm.status_updates == [second]
+    assert store.get_watermark(STATUS_STREAM) is None
+
+    crm.failing.clear()  # root cause fixed in Salesforce
+    engine.run()
+
+    assert crm.status_updates == [second, first]  # A retried, B not pushed twice
+    assert store.get_watermark(STATUS_STREAM) == second.updated_at
+    assert store.open_dead_letters() == []
+
+
+def test_order_success_keeps_writeback_dead_letter_open(make_engine, store) -> None:
+    crm = FlakyCRM([opportunity(OPP_A)], failing={OPP_A})
+    engine, erp = make_engine(crm)
+    erp.statuses = [_status(OPP_A, "S00001", 0)]
+    engine.run()  # order created, write-back parked
+
+    crm.records = [opportunity(OPP_A, lines=[("TENT-2P", 3, 349.0)],
+                               modified="2026-11-03T10:00:00.000+0000")]
+    engine.run(writeback=False)  # order updated successfully
+
+    [dead] = store.open_dead_letters()
+    assert dead.stage == "writeback"

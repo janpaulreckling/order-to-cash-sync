@@ -41,16 +41,25 @@ def _parse_odoo_dt(value: str) -> datetime:
 
 
 def derive_invoice_status(invoices: Iterable[dict[str, Any]]) -> tuple[InvoiceStatus, Decimal]:
-    """Collapse an order's customer invoices into one CRM-facing status.
+    """Collapse an order's customer invoices and credit notes into one CRM-facing status.
 
-    Only posted invoices count; drafts are not receivables yet.
+    Only posted documents count; drafts are not receivables yet. Credit notes
+    (out_refund) are netted against invoices: a credit note also brings the
+    invoice's residual to zero, and without netting a reversed invoice would
+    read as "Paid" with no cash received.
     """
     posted = [inv for inv in invoices if inv.get("state") == "posted"]
     if not posted:
         return InvoiceStatus.NOT_INVOICED, Decimal("0.00")
 
-    due = sum((Decimal(str(inv["amount_residual"])) for inv in posted), Decimal(0)).quantize(CENT)
-    total = sum((Decimal(str(inv["amount_total"])) for inv in posted), Decimal(0)).quantize(CENT)
+    def net(field: str) -> Decimal:
+        sign = {"out_invoice": 1, "out_refund": -1}
+        return sum((sign[inv.get("move_type", "out_invoice")] * Decimal(str(inv[field]))
+                    for inv in posted), Decimal(0)).quantize(CENT)
+
+    total, due = net("amount_total"), net("amount_residual")
+    if total <= 0:
+        return InvoiceStatus.CREDITED, Decimal("0.00")
     if due <= 0:
         return InvoiceStatus.PAID, Decimal("0.00")
     if due < total:
@@ -212,7 +221,7 @@ class OdooERP:
                                    fields=["name", "write_date"]):
             changed_names[order["name"]] = _parse_odoo_dt(order["write_date"])
         for move in self._execute("account.move", "search_read",
-                                  [("move_type", "=", "out_invoice"),
+                                  [("move_type", "in", ["out_invoice", "out_refund"]),
                                    ("invoice_origin", "!=", False), *stamp],
                                   fields=["invoice_origin", "write_date"]):
             ts = _parse_odoo_dt(move["write_date"])
@@ -237,7 +246,7 @@ class OdooERP:
         statuses = []
         for o in orders:
             own = [invoices[i] for i in o["invoice_ids"]
-                   if i in invoices and invoices[i]["move_type"] == "out_invoice"]
+                   if i in invoices and invoices[i]["move_type"] in ("out_invoice", "out_refund")]
             status, due = derive_invoice_status(own)
             statuses.append(ErpOrderStatus(
                 external_id=o["client_order_ref"], erp_order_ref=o["name"],

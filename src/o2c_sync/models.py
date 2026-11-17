@@ -89,6 +89,7 @@ class InvoiceStatus(StrEnum):
     INVOICED = "Invoiced"
     PARTIALLY_PAID = "Partially Paid"
     PAID = "Paid"
+    CREDITED = "Credited"  # fully reversed by credit notes; no cash received
 
 
 class ErpOrderStatus(_Canonical):

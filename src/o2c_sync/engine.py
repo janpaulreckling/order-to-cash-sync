@@ -14,7 +14,7 @@ from o2c_sync.errors import (
 )
 from o2c_sync.mapping import FieldMapper
 from o2c_sync.models import SalesOrder
-from o2c_sync.state import RunStats, StateStore
+from o2c_sync.state import WRITEBACK_STAGE, RunStats, StateStore
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +115,12 @@ class SyncEngine:
 
     # ---------------------------------------------------------- ERP -> CRM
     def _sync_statuses(self, run_id: int, stats: RunStats) -> None:
+        # Unlike orders, a failed write-back has no replay path of its own: it is
+        # regenerated from the ERP. So the watermark must not move past the first
+        # failure; later statuses are still pushed, and re-listing them next run
+        # costs no API calls because unchanged ones are skipped by fingerprint.
         since = self.store.get_watermark(STATUS_STREAM)
+        blocked = False
         for status in self.erp.list_status_changes(since):
             fingerprint = status.fingerprint()
             known = self.store.get_mapping("order_status", status.external_id)
@@ -126,14 +131,18 @@ class SyncEngine:
                         "order_status", status.external_id, status.erp_order_ref, fingerprint
                     )
                     stats.written_back += 1
+                    self.store.resolve_dead_letters(status.external_id, writeback=True)
                 except (PermanentError, TransientError) as exc:
+                    log.error("%s failed at writeback: %s", status.external_id, exc)
                     self.store.dead_letter(
-                        run_id, status.external_id, "writeback", str(exc),
+                        run_id, status.external_id, WRITEBACK_STAGE, str(exc),
                         status.model_dump(mode="json"),
                     )
                     stats.failed += 1
                     stats.errors.append(f"{status.external_id}: {exc}")
-            self.store.set_watermark(STATUS_STREAM, status.updated_at)
+                    blocked = True
+            if not blocked:
+                self.store.set_watermark(STATUS_STREAM, status.updated_at)
 
     # ------------------------------------------------------------ replay
     def replay_dead_letters(self) -> RunStats:
@@ -143,7 +152,7 @@ class SyncEngine:
         stats = RunStats()
         try:
             for entry in self.store.open_dead_letters():
-                if entry.stage == "writeback":
+                if entry.stage == WRITEBACK_STAGE:
                     continue  # regenerated from ERP on the next normal run
                 try:
                     order = self.mapper.to_sales_order(entry.payload)

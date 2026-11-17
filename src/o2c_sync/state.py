@@ -11,6 +11,8 @@ from typing import Any
 from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+WRITEBACK_STAGE = "writeback"
+
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
@@ -152,15 +154,25 @@ class StateStore:
             return s.scalars(select(SyncRun).order_by(SyncRun.id.desc()).limit(limit)).all()
 
     # --- dead-letter queue -----------------------------------------------
+    # Two independent lanes per record: the order (CRM -> ERP: mapping,
+    # validation, load, conflict) and its status write-back (ERP -> CRM). They
+    # share the Opportunity Id, so keying on it alone would let a write-back
+    # failure overwrite a parked order and its payload.
+    @staticmethod
+    def _lane(stage: str) -> Any:
+        is_writeback = DeadLetter.stage == WRITEBACK_STAGE
+        return is_writeback if stage == WRITEBACK_STAGE else ~is_writeback
+
     def dead_letter(
         self, run_id: int, source_id: str, stage: str, error: str, payload: dict[str, Any]
     ) -> None:
-        """Park a failed record. Repeated failures of the same record update the
-        open entry instead of piling up duplicates."""
+        """Park a failed record. Repeated failures of the same record in the same
+        lane update the open entry instead of piling up duplicates."""
         with self._tx() as s:
             row = s.scalars(
                 select(DeadLetter).where(
-                    DeadLetter.source_id == source_id, DeadLetter.resolved_at.is_(None)
+                    DeadLetter.source_id == source_id, DeadLetter.resolved_at.is_(None),
+                    self._lane(stage),
                 )
             ).first()
             if row is None:
@@ -171,11 +183,13 @@ class StateStore:
                 row.attempts += 1
                 row.last_seen_at = utcnow()
 
-    def resolve_dead_letters(self, source_id: str) -> int:
+    def resolve_dead_letters(self, source_id: str, *, writeback: bool = False) -> int:
+        """Resolve the open entries of one lane (order by default)."""
+        lane = self._lane(WRITEBACK_STAGE if writeback else "load")
         with self._tx() as s:
             rows = s.scalars(
                 select(DeadLetter).where(
-                    DeadLetter.source_id == source_id, DeadLetter.resolved_at.is_(None)
+                    DeadLetter.source_id == source_id, DeadLetter.resolved_at.is_(None), lane
                 )
             ).all()
             for row in rows:
