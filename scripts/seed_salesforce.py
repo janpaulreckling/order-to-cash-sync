@@ -8,6 +8,9 @@ Creates, through the real REST API and idempotently (safe to re-run):
 - opportunities with line items: most Closed Won, one still open, one Closed Lost
 - ~6 months of generated order history (deterministic, anchored to a fixed date, so
   every re-run produces the same deals) for the analytics layer
+- an additive fall-volume batch (Oct 15 - Nov 14) so the November close has a realistic
+  number of open invoices for the sibling cash-reconciliation project; its own RNG, so
+  adding it never changes the deals above
 
 Usage: uv run python scripts/seed_salesforce.py
 """
@@ -144,6 +147,31 @@ def history_opportunities() -> list[tuple[str, str, str, int, list[tuple[str, in
     return deals
 
 
+VOLUME_START, VOLUME_END = date(2026, 10, 15), date(2026, 11, 14)
+VOLUME_DEALS = 30
+
+
+def volume_opportunities() -> list[tuple[str, str, str, int, list[tuple[str, int, float]]]]:
+    rng = random.Random("fall-volume-2026")
+    with CATALOG.open(newline="") as fh:
+        list_price = {row["sku"]: float(row["list_price"]) for row in csv.DictReader(fh)}
+    accounts = list(SEGMENTS)
+    span = (VOLUME_END - VOLUME_START).days
+    deals = []
+    for n in range(1, VOLUME_DEALS + 1):
+        account = accounts[(n - 1) % len(accounts)]
+        short, mix, _ = SEGMENTS[account]
+        close = VOLUME_START + timedelta(days=rng.randrange(0, span + 1))
+        lines = []
+        for sku in rng.sample(mix, k=rng.randint(1, min(2, len(mix)))):
+            qty = rng.randint(2, 6) if list_price[sku] > 500 else rng.randint(6, 30)
+            discount = rng.choice([0.08, 0.10, 0.12, 0.15])
+            lines.append((sku, qty, round(list_price[sku] * (1 - discount), 2)))
+        deals.append((f"{short} - Fall Reorder #{n:02d}", account, "Closed Won",
+                      (date.today() - close).days, lines))
+    return deals
+
+
 def connect(s: Settings) -> Salesforce:
     if s.sf_cli_org:
         return sf_cli_session(s.sf_cli_org)
@@ -211,7 +239,7 @@ def seed_opportunities(sf: Salesforce, accounts: dict[str, str], pbes: dict[str,
     std = find_one(sf, "SELECT Id FROM Pricebook2 WHERE IsStandard = true")
     assert std
     created = 0
-    deals = OPPORTUNITIES + history_opportunities()
+    deals = OPPORTUNITIES + history_opportunities() + volume_opportunities()
     for name, account, stage, days_ago, lines in deals:
         if find_one(sf, f"SELECT Id FROM Opportunity WHERE Name = '{q(name)}'"):
             continue  # never rewrite existing deals: that would re-trigger the sync
