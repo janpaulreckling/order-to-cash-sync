@@ -37,7 +37,7 @@ The dashboard answers one question: *how fast do won deals turn into cash, and w
 2. **One of them is a terms problem, not a customer problem.** Twin Cities Trailhead pays in 33 days, about as fast as the average customer (32 days), but its terms are 15 days, so every invoice shows as late. *Action:* align the terms with how the customer actually pays, or enforce them; chasing it like a bad payer would cost goodwill.
 3. **Time is lost in collections, not in billing.** The median deal is invoiced 5–6 days after it is won and paid 22–35 days after that (DSO 53 days). *Action:* work on collections; faster invoicing has little left to gain.
 
-And the check that makes the numbers trustworthy: **136 of 138 won deals match their ERP order** in amount and status. The other two were held back by the sync for a person to review, each with a reason.
+And the check that makes the numbers trustworthy: of **138 won deals**, 137 became ERP orders and **136 match their order exactly** in amount and status. The other two were held back by the sync for a person to review, each with a reason: one uses a product the ERP does not carry, one was edited in Salesforce after Finance had confirmed the order.
 
 *About this data: the systems and the sync are real, but customers and their payment habits come from the [finance simulator](scripts/simulate_finance.py), which gives some customers a slow or late profile. The analysis finds those from the raw invoices and payments, plus one it was not told about (finding 2). It shows the method, not a real business.*
 
@@ -182,7 +182,7 @@ The engine is tested against in-memory fakes of both systems. The tests cover id
 
 The SQL models have their own tests on a small hand-checkable raw layer: credit notes are not cash, lost deals and draft invoices are excluded, aging buckets, and the reconciliation finding a missing deal along with its dead-letter reason.
 
-The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker. 137 won deals synced, with open and lost deals filtered out. Paid, Partially Paid, Invoiced and Credited were written back. A full rebuild from an empty ERP produced no duplicates. Running live surfaced five issues that the fakes could not:
+The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker. Of 138 won deals, 137 synced (the one with a gift-card SKU the ERP does not carry is held back on purpose), with open and lost deals filtered out. Paid, Partially Paid, Invoiced and Credited were written back. A full rebuild from an empty ERP produced no duplicates. Running live surfaced five issues that the fakes could not:
 
 1. Sub-cent unit prices after quantity edits, caught by the post-write total check.
 2. A reversed invoice that read as Paid. Credit notes are now netted.
