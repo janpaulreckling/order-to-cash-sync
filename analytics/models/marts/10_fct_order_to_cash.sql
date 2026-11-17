@@ -41,6 +41,7 @@ SELECT
     o.amount                                    AS crm_amount,
     o.crm_invoice_status,
     o.crm_amount_due,
+    so.order_id,
     so.order_name,
     so.order_state,
     so.order_amount,

@@ -48,11 +48,12 @@ def _none(value: Any) -> Any:
     return None if value is False else value
 
 
-def extract_salesforce(s: Settings) -> list[tuple[Any, ...]]:
+def extract_salesforce(s: Settings) -> tuple[str, list[tuple[Any, ...]]]:
+    """Returns the org's base URL (for drill-through links) and the opportunities."""
     if not s.sf_cli_org:
         raise SystemExit("set O2C_SF_CLI_ORG to extract from Salesforce")
     sf = sf_cli_session(s.sf_cli_org)
-    return [
+    return f"https://{sf.sf_instance}", [
         (r["Id"], r["Name"], r["AccountId"], (r["Account"] or {}).get("Name"), r["StageName"],
          r["IsWon"], r["IsClosed"], r["Amount"], r["CloseDate"], r["CreatedDate"][:19],
          r["ERP_Order_Ref__c"], r["ERP_Invoice_Status__c"], r["ERP_Amount_Due__c"])
@@ -141,6 +142,7 @@ RAW_DDL = {
     "dead_letters": "id INTEGER, source_id VARCHAR, stage VARCHAR, error VARCHAR, "
                     "attempts INTEGER, created_at TIMESTAMP, last_seen_at TIMESTAMP, "
                     "resolved_at TIMESTAMP",
+    "meta": "key VARCHAR, value VARCHAR",
 }
 
 
@@ -180,8 +182,32 @@ def query(con: duckdb.DuckDBPyConnection, sql: str) -> list[dict[str, Any]]:
 
 
 def render_dashboard(con: duckdb.DuckDBPyConnection) -> None:
+    meta = dict(con.execute("SELECT key, value FROM raw.meta").fetchall())
     data = {
         "as_of": date.today().isoformat(),
+        "links": {"salesforce": meta.get("salesforce_url"), "odoo": meta.get("odoo_url")},
+        # Row-level facts for the interactive dashboard; it filters and aggregates
+        # them in the browser. Definitions (status, cycle days, netting) stay in SQL.
+        "deals": query(con, """
+            SELECT f.opportunity_id AS id, f.opportunity_name AS name, f.customer,
+                   f.terms_days AS terms, f.close_date AS close, f.crm_amount AS amount,
+                   f.order_id, f.order_name AS order_no, f.erp_status AS status,
+                   f.crm_invoice_status AS crm_status, f.invoice_date, f.due_date,
+                   f.fully_paid_date AS paid_date, f.net_due, f.days_won_to_invoice,
+                   f.days_invoice_to_cash, f.days_won_to_cash, f.days_paid_vs_due,
+                   r.check_status AS check, r.dlq_reason
+            FROM marts.fct_order_to_cash f
+            JOIN marts.crm_erp_reconciliation r USING (opportunity_id)
+            ORDER BY f.close_date DESC"""),
+        "invoices": query(con, """
+            SELECT move_id AS id, document_no AS no, move_type AS type, order_name AS order_no,
+                   customer, invoice_date AS date, due_date AS due, amount_signed AS amount,
+                   reversed_entry_id AS reverses
+            FROM marts.fct_invoices"""),
+        "payments": query(con, """
+            SELECT payment_id AS id, move_id, order_name AS order_no, customer,
+                   payment_date AS date, amount
+            FROM marts.fct_payments"""),
         "kpis": query(con, "SELECT * FROM marts.kpis")[0],
         "monthly": query(con, "SELECT * FROM marts.monthly_cash_flow ORDER BY month"),
         "aging": query(con, "SELECT * FROM marts.ar_aging ORDER BY bucket_order"),
@@ -209,8 +235,9 @@ def main() -> None:
     if not args.no_extract:
         s = Settings()
         print("extract:")
-        load_raw(con, {"sf_opportunities": extract_salesforce(s), **extract_odoo(s),
-                       **extract_state(s)})
+        sf_url, opportunities = extract_salesforce(s)
+        load_raw(con, {"sf_opportunities": opportunities, **extract_odoo(s), **extract_state(s),
+                       "meta": [("salesforce_url", sf_url), ("odoo_url", s.odoo_url)]})
     print("models:")
     run_models(con)
     render_dashboard(con)

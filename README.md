@@ -57,6 +57,8 @@ The sync produces a joined-up record of every deal from *won* to *cash*, which n
 | Does every won deal exist in the ERP, with the same amount and status? | `crm_erp_reconciliation` |
 | What did the sync park for a human, and why? | `sync_health_dead_letters` |
 
+The dashboard ([`analytics/dashboard.html`](analytics/dashboard.html), one static file) has global filters (date range, customer, payment terms) that drive every chart, KPI deltas against the prior period with sparklines, and drill-down: clicking a period, aging bucket, status or customer filters the deal table, whose rows link to the Salesforce opportunity and the Odoo order. Receivables and DSO are rebuilt *as of* any date from invoice, payment and credit-note events, and they match the SQL marts to the cent.
+
 Two analyst details: billings net out credit notes (a reversed invoice is *Credited*, not *Paid*), and the cycle-time chart flags that recent months are right-censored, because only the fast payers have paid so far.
 
 ## Design decisions
