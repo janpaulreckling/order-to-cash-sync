@@ -13,3 +13,4 @@ dist/
 .sf_secret*
 .sf/
 .sfdx/
+analytics/warehouse.duckdb*

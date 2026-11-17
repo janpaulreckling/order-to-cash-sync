@@ -38,6 +38,23 @@ flowchart LR
 4. **Write-back**: watches ERP invoices and payments and pushes `Not Invoiced → Invoiced → Partially Paid → Paid` plus the amount due onto the Opportunity.
 5. **Observe**: every run, failure and checkpoint is persisted, and failed records can be inspected and replayed.
 
+## What Finance and Sales see
+
+![Order-to-cash dashboard](docs/img/dashboard.png)
+
+The sync produces a joined-up record of every deal from *won* to *cash*, which no single system holds. An [analytics layer](analytics/) extracts it live from Salesforce, Odoo and the sync's own state DB into DuckDB and models it in plain SQL (staging → marts, the dbt layering without the tooling):
+
+| Question | Mart |
+|---|---|
+| How long from deal won to cash, and where does the time go? | `fct_order_to_cash`, `cycle_time_by_month` |
+| What are bookings vs. billings vs. collections each month? | `monthly_cash_flow` |
+| How much is overdue, and how long? DSO? | `ar_aging`, `kpis` |
+| Which customers pay late against their terms? | `customer_payment_behavior` |
+| Does every won deal exist in the ERP, with the same amount and status? | `crm_erp_reconciliation` |
+| What did the sync park for a human, and why? | `sync_health_dead_letters` |
+
+Two analyst details: billings net out credit notes (a reversed invoice is *Credited*, not *Paid*), and the cycle-time chart flags that recent months are right-censored, because only the fast payers have paid so far.
+
 ## Design decisions
 
 These are the parts I would want to discuss in a design review:
@@ -78,6 +95,7 @@ uv run o2c sync
 uv run python scripts/simulate_finance.py  # Finance invoices and books payments in Odoo
 uv run o2c sync               # invoice/payment status flows back to Salesforce
 uv run o2c status
+uv run python analytics/build.py   # extract -> SQL models -> analytics/dashboard.html
 ```
 
 Salesforce setup (free Developer Edition, OAuth via the Salesforce CLI, custom fields as deployable metadata): see [docs/salesforce_setup.md](docs/salesforce_setup.md).
@@ -99,6 +117,8 @@ uv run pytest
 
 The engine is tested against in-memory fakes of both systems. The tests cover idempotency, lost-state recovery, conflict handling, poison records, DLQ replay, rate-limit abort and resume, dry-run and write-back de-duplication.
 
+The SQL models have their own tests on a small hand-checkable raw layer: credit notes are not cash, lost deals and draft invoices are excluded, aging buckets, and the reconciliation finding a missing deal along with its dead-letter reason.
+
 The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker: 7 won deals synced (open and lost deals filtered), the unknown SKU dead-lettered, Paid / Partially Paid / Invoiced written back, a CRM edit to a confirmed order parked as a conflict, and the rounding drift above caught and cleared after the fix in Salesforce.
 
 ## Project layout
@@ -107,6 +127,10 @@ The fakes are backed by end-to-end runs against a real Salesforce Developer Edit
 config/field_mapping.yaml     Salesforce → canonical mapping (reviewed like code)
 config/product_catalog.csv    ERP product master (SKU = Odoo default_code)
 salesforce/force-app/         custom fields + permission set as deployable metadata
+analytics/
+  build.py                    extract (Salesforce, Odoo, state DB) -> DuckDB -> dashboard
+  models/staging/*.sql        renamed, typed views over the raw extract
+  models/marts/*.sql          business-facing tables (cycle time, aging, DSO, reconciliation)
 scripts/
   seed_odoo.py                idempotent ERP setup for the local demo
   seed_salesforce.py          idempotent demo org: products, accounts, opportunities
@@ -130,7 +154,7 @@ tests/
 - [x] Seed script for a realistic Salesforce demo org
 - [ ] Bulk API 2.0 path for initial backfills of >10k records
 - [ ] Prefect deployment with schedule and Slack alert on exit code ≠ 0
-- [ ] Sync-health dashboard (Power BI) on top of the state DB
+- [x] Order-to-cash and sync-health dashboard on top of the state DB and both systems
 - [ ] NetSuite SuiteTalk connector
 
 ## Related

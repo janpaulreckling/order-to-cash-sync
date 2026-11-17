@@ -87,7 +87,9 @@ def main() -> None:
                                                  fields=["name"])}
     orders = odoo("sale.order", "search_read", [("client_order_ref", "!=", False)],
                   fields=["id", "name", "state", "amount_total", "client_order_ref",
-                          "partner_id", "invoice_ids"], order="id asc")
+                          "partner_id", "invoice_ids"])
+    # Oldest deals first, so invoice numbers ascend with the invoice date.
+    orders.sort(key=lambda o: (closes.get(o["client_order_ref"], today), o["id"]))
     credited_done = False
     counts: dict[str, int] = {}
 
@@ -100,8 +102,9 @@ def main() -> None:
         p = plan(order["name"], customer, close, total)
 
         # Finance maintains the customer's payment terms in the ERP.
+        term_id = term_ids[TERMS.get(customer, DEFAULT_TERM)]
         odoo("res.partner", "write", [order["partner_id"][0]],
-             {"property_payment_term_id": term_ids[TERMS.get(customer, DEFAULT_TERM)]})
+             {"property_payment_term_id": term_id})
 
         if p["confirm_date"] > today - timedelta(days=1):
             counts["quotation"] = counts.get("quotation", 0) + 1
@@ -126,7 +129,10 @@ def main() -> None:
                              "amount_residual", "invoice_date"])
         inv = next(m for m in moves if m["move_type"] == "out_invoice")
         if inv["state"] == "draft":
-            odoo("account.move", "write", [inv["id"]], {"invoice_date": str(p["invoice_date"])})
+            # The invoice inherits the order's (empty) payment term; without a term
+            # Odoo leaves the due date at the posting day instead of invoice date + terms.
+            odoo("account.move", "write", [inv["id"]],
+                 {"invoice_date": str(p["invoice_date"]), "invoice_payment_term_id": term_id})
             odoo("account.move", "action_post", [inv["id"]])
             inv = odoo("account.move", "read", [inv["id"]],
                        fields=["id", "name", "state", "amount_total", "amount_residual",

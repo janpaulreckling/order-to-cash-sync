@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order-to-Cash Dashboard</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+  --early: #2a78d6; --late: #e34948;
+  --good: #006300; --critical: #d03b3b; --warning-ink: #8a5a00;
+  --hover-wash: rgba(11,11,11,0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+    --early: #3987e5; --late: #e66767;
+    --good: #0ca30c; --critical: #e66767; --warning-ink: #fab219;
+    --hover-wash: rgba(255,255,255,0.05);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+  --early: #3987e5; --late: #e66767;
+  --good: #0ca30c; --critical: #e66767; --warning-ink: #fab219;
+  --hover-wash: rgba(255,255,255,0.05);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1180px; margin: 0 auto; padding: 28px 16px 48px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between;
+  gap: 8px 24px; margin-bottom: 20px; }
+h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--text-secondary); margin: 2px 0 0; }
+.sources { color: var(--text-muted); font-size: 12px; }
+.kpis { display: grid; grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(150px, 1fr));
+  gap: 12px; margin-bottom: 12px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; min-width: 0; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; }
+.tile .note { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.tile.hero .value { font-size: 52px; line-height: 1.05; letter-spacing: -0.02em; }
+.tile.hero .unit { font-size: 20px; font-weight: 500; color: var(--text-secondary); }
+.tiles-2 { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 12px;
+  margin-bottom: 20px; }
+.status { display: inline-flex; align-items: center; gap: 6px; }
+.status svg { flex: none; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+figure { margin: 0; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px 16px 12px; min-width: 0; }
+.card.wide { grid-column: 1 / -1; }
+.card-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.card h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.card .desc { color: var(--text-secondary); font-size: 13px; margin: 2px 0 8px; }
+.card .foot { color: var(--text-muted); font-size: 12px; margin: 6px 0 0; }
+.toggle { font: inherit; font-size: 12px; color: var(--text-secondary); background: none;
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer;
+  white-space: nowrap; }
+.toggle:hover { background: var(--hover-wash); }
+.toggle:focus-visible, .mark:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--text-secondary);
+  font-size: 12px; margin: 0 0 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.axis-text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.label-text { fill: var(--text-secondary); font-size: 11px; }
+.value-text { fill: var(--text-primary); font-size: 11px; font-weight: 600; }
+.mark { cursor: default; }
+.mark:hover rect.fill, .mark:focus rect.fill, .mark:hover path.fill, .mark:focus path.fill { opacity: 0.8; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px;
+  border-bottom: 1px solid var(--axis); padding: 6px 8px; }
+td { border-bottom: 1px solid var(--grid); padding: 6px 8px; vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+[hidden] { display: none !important; }
+#tooltip { position: fixed; pointer-events: none; z-index: 10; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 150px; }
+#tooltip .tt-title { color: var(--text-secondary); margin-bottom: 4px; }
+#tooltip .tt-row { display: flex; align-items: center; gap: 8px; }
+#tooltip .tt-row strong { font-variant-numeric: tabular-nums; }
+#tooltip .tt-row span { color: var(--text-secondary); }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-secondary); white-space: nowrap; }
+@media (max-width: 860px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpis .hero { grid-column: 1 / -1; }
+  .tiles-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Northwind Outfitters: order-to-cash</h1>
+      <p class="sub" id="asof"></p>
+    </div>
+    <div class="sources">Extracted live from Salesforce (REST), Odoo 17 (XML-RPC) and the sync state DB.
+      Modeled in DuckDB SQL.</div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Headline figures"></section>
+  <section class="tiles-2" id="kpis2" aria-label="Collections and data quality"></section>
+
+  <section class="grid">
+    <figure class="card wide" id="card-monthly">
+      <div class="card-head">
+        <div><h2>Bookings, billings and collections by month</h2>
+          <p class="desc">Deals won in Salesforce, net invoiced in Odoo (credit notes subtracted), cash received</p></div>
+        <button class="toggle" data-target="monthly">Show table</button>
+      </div>
+      <div class="legend" id="legend-monthly"></div>
+      <div class="chart" id="chart-monthly"></div>
+      <div class="table-wrap" id="table-monthly" hidden></div>
+    </figure>
+
+    <figure class="card" id="card-aging">
+      <div class="card-head">
+        <div><h2>Open receivables by days past due</h2>
+          <p class="desc">Unpaid invoice balances, as of today</p></div>
+        <button class="toggle" data-target="aging">Show table</button>
+      </div>
+      <div class="chart" id="chart-aging"></div>
+      <div class="table-wrap" id="table-aging" hidden></div>
+    </figure>
+
+    <figure class="card" id="card-cycle">
+      <div class="card-head">
+        <div><h2>Order-to-cash cycle by close month</h2>
+          <p class="desc">Median days per stage</p></div>
+        <button class="toggle" data-target="cycle">Show table</button>
+      </div>
+      <div class="legend" id="legend-cycle"></div>
+      <div class="chart" id="chart-cycle"></div>
+      <div class="table-wrap" id="table-cycle" hidden></div>
+      <p class="foot">Recent months are right-censored: only the fastest payers have paid so far,
+        so their invoice-to-cash median will rise.</p>
+    </figure>
+
+    <figure class="card wide" id="card-customers">
+      <div class="card-head">
+        <div><h2>Customer payment behavior vs. terms</h2>
+          <p class="desc">Average days paid before (−) or after (+) the due date, fully paid invoices</p></div>
+        <button class="toggle" data-target="customers">Show table</button>
+      </div>
+      <div class="legend" id="legend-customers"></div>
+      <div class="chart" id="chart-customers"></div>
+      <div class="table-wrap" id="table-customers" hidden></div>
+    </figure>
+
+    <figure class="card" id="card-recon">
+      <div class="card-head">
+        <div><h2>CRM ↔ ERP reconciliation</h2>
+          <p class="desc">Every won deal checked against its ERP order: exists, same amount, status synced</p></div>
+      </div>
+      <div class="table-wrap" id="table-recon"></div>
+    </figure>
+
+    <figure class="card" id="card-dlq">
+      <div class="card-head">
+        <div><h2>Open dead letters</h2>
+          <p class="desc">Records the sync parked for a human, with the reason</p></div>
+      </div>
+      <div class="table-wrap" id="table-dlq"></div>
+    </figure>
+  </section>
+</main>
+<div id="tooltip" hidden role="status"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+// ---------------------------------------------------------------- formatting
+const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const usd2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+function compactUsd(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return "$" + (v / 1e6).toFixed(a >= 1e7 ? 0 : 1) + "M";
+  if (a >= 1e4) return "$" + Math.round(v / 1e3) + "K";
+  if (a >= 1e3) return "$" + (v / 1e3).toFixed(1) + "K";
+  return usd0.format(v);
+}
+const monthName = iso => new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short" });
+const monthLong = iso => new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "long", year: "numeric" });
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function el(tag, attrs = {}, text) {
+  const svgTags = ["svg", "g", "rect", "path", "line", "circle", "text", "polyline"];
+  const node = svgTags.includes(tag)
+    ? document.createElementNS("http://www.w3.org/2000/svg", tag)
+    : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function niceTicks(max, count = 4) {
+  if (max <= 0) return [0, 1];
+  const raw = max / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const ticks = [];
+  for (let t = 0; t <= max + step * 0.001; t += step) ticks.push(t);
+  if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
+  return ticks;
+}
+
+// A column/bar with 4px rounded data-end and a square baseline.
+function roundedBar(x, y, w, h, dir = "up") {
+  const r = Math.min(4, Math.abs(w) / 2, Math.abs(h));
+  if (h <= 0 || w <= 0) return "";
+  if (dir === "up") return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+  if (dir === "right") return `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x}Z`;
+  /* left */ return `M${x + w},${y}H${x + r}Q${x},${y} ${x},${y + r}V${y + h - r}Q${x},${y + h} ${x + r},${y + h}H${x + w}Z`;
+}
+
+// ---------------------------------------------------------------- tooltip
+const tip = document.getElementById("tooltip");
+function showTip(evt, title, rows) {
+  tip.replaceChildren();
+  tip.append(el("div", { class: "tt-title" }, title));
+  for (const r of rows) {
+    const row = el("div", { class: "tt-row" });
+    if (r.color) {
+      const key = el("svg", { width: 14, height: 4, "aria-hidden": "true" });
+      key.append(el("line", { x1: 0, x2: 14, y1: 2, y2: 2, stroke: r.color, "stroke-width": 2, "stroke-linecap": "round" }));
+      row.append(key);
+    }
+    row.append(el("strong", {}, r.value), el("span", {}, r.label));
+    tip.append(row);
+  }
+  tip.hidden = false;
+  const box = tip.getBoundingClientRect();
+  let x, y;
+  if (evt.clientX !== undefined && evt.type.startsWith("pointer")) { x = evt.clientX + 14; y = evt.clientY + 14; }
+  else { const b = evt.target.getBoundingClientRect(); x = b.right + 8; y = b.top; }
+  if (x + box.width > innerWidth - 8) x = Math.max(8, x - box.width - 28);
+  if (y + box.height > innerHeight - 8) y = Math.max(8, innerHeight - box.height - 8);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.hidden = true; };
+
+function bindMark(node, title, rows) {
+  node.setAttribute("tabindex", "0");
+  node.setAttribute("class", "mark");
+  node.setAttribute("aria-label", title + ": " + rows.map(r => r.label + " " + r.value).join(", "));
+  node.addEventListener("pointermove", e => showTip(e, title, rows));
+  node.addEventListener("pointerleave", hideTip);
+  node.addEventListener("focus", e => showTip(e, title, rows));
+  node.addEventListener("blur", hideTip);
+}
+
+// ---------------------------------------------------------------- tables
+function table(container, columns, rows) {
+  const t = el("table"), head = el("tr");
+  for (const c of columns) head.append(el("th", c.num ? { class: "num" } : {}, c.label));
+  const thead = el("thead"); thead.append(head); t.append(thead);
+  const body = el("tbody");
+  for (const r of rows) {
+    const tr = el("tr");
+    for (const c of columns) {
+      const v = c.get(r);
+      const td = el("td", c.num ? { class: "num" } : {});
+      if (v instanceof Node) td.append(v); else td.textContent = v ?? "–";
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+  t.append(body);
+  container.replaceChildren(t);
+}
+
+function legend(container, items, kind = "line") {
+  container.replaceChildren();
+  for (const it of items) {
+    const s = el("span");
+    const sw = el("svg", { width: 14, height: 10, "aria-hidden": "true" });
+    if (kind === "line") sw.append(el("line", { x1: 0, x2: 14, y1: 5, y2: 5, stroke: it.color, "stroke-width": 2, "stroke-linecap": "round" }));
+    else sw.append(el("rect", { x: 1, y: 1, width: 12, height: 8, rx: 2, fill: it.color }));
+    s.append(sw, document.createTextNode(it.label));
+    container.append(s);
+  }
+}
+
+// ---------------------------------------------------------------- charts
+function frame(container, height, margin) {
+  const width = container.clientWidth || 600;
+  const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, height, role: "img" });
+  container.replaceChildren(svg);
+  return { svg, width, height, m: margin, iw: width - margin.l - margin.r, ih: height - margin.t - margin.b };
+}
+
+function yAxis(f, ticks, y, fmt) {
+  const g = el("g");
+  for (const t of ticks) {
+    const yy = y(t);
+    g.append(el("line", { x1: f.m.l, x2: f.width - f.m.r, y1: yy, y2: yy,
+      stroke: t === 0 ? css("--axis") : css("--grid"), "stroke-width": 1 }));
+    g.append(el("text", { x: f.m.l - 8, y: yy + 4, "text-anchor": "end", class: "axis-text" }, fmt(t)));
+  }
+  f.svg.append(g);
+}
+
+function lineChart(container, rows, series, ariaLabel) {
+  const f = frame(container, 280, { t: 12, r: 16, b: 28, l: 56 });
+  f.svg.setAttribute("aria-label", ariaLabel);
+  const max = Math.max(...rows.flatMap(r => series.map(s => r[s.key])));
+  const ticks = niceTicks(max), top = ticks[ticks.length - 1];
+  const step = f.iw / Math.max(1, rows.length - 1);
+  const x = i => f.m.l + i * step, y = v => f.m.t + f.ih - (v / top) * f.ih;
+  yAxis(f, ticks, y, compactUsd);
+  rows.forEach((r, i) => f.svg.append(el("text", { x: x(i), y: f.height - 8, "text-anchor": "middle", class: "axis-text" }, monthName(r.month))));
+  for (const s of series) {
+    const color = css(s.color);
+    f.svg.append(el("polyline", { points: rows.map((r, i) => `${x(i)},${y(r[s.key])}`).join(" "),
+      fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    rows.forEach((r, i) => f.svg.append(el("circle", { cx: x(i), cy: y(r[s.key]), r: 4, fill: color,
+      stroke: css("--surface-1"), "stroke-width": 2 })));
+  }
+  // Crosshair: the pointer finds the month; one tooltip lists every series.
+  const cross = el("line", { y1: f.m.t, y2: f.m.t + f.ih, stroke: css("--axis"), "stroke-width": 1, visibility: "hidden" });
+  f.svg.append(cross);
+  const hit = el("rect", { x: f.m.l - step / 2, y: f.m.t, width: f.iw + step, height: f.ih, fill: "transparent", tabindex: 0,
+    "aria-label": "Monthly values; use arrow keys to move between months" });
+  let idx = rows.length - 1;
+  const show = (i, evt) => {
+    idx = Math.max(0, Math.min(rows.length - 1, i));
+    cross.setAttribute("x1", x(idx)); cross.setAttribute("x2", x(idx)); cross.setAttribute("visibility", "visible");
+    showTip(evt, monthLong(rows[idx].month), series.map(s => ({ color: css(s.color), value: usd0.format(rows[idx][s.key]), label: s.label })));
+  };
+  hit.addEventListener("pointermove", e => {
+    const pt = f.svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const local = pt.matrixTransform(f.svg.getScreenCTM().inverse());
+    show(Math.round((local.x - f.m.l) / step), e);
+  });
+  hit.addEventListener("focus", e => show(idx, e));
+  hit.addEventListener("keydown", e => {
+    if (e.key === "ArrowRight") { show(idx + 1, e); e.preventDefault(); }
+    if (e.key === "ArrowLeft") { show(idx - 1, e); e.preventDefault(); }
+  });
+  const hide = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
+  hit.addEventListener("pointerleave", hide); hit.addEventListener("blur", hide);
+  f.svg.append(hit);
+}
+
+function columnChart(container, rows, groups, series, ariaLabel, fmtValue, fmtAxis, labelValues) {
+  const f = frame(container, 240, { t: 18, r: 8, b: 28, l: 48 });
+  f.svg.setAttribute("aria-label", ariaLabel);
+  const max = Math.max(1, ...rows.flatMap(r => series.map(s => r[s.key] ?? 0)));
+  const ticks = niceTicks(max), top = ticks[ticks.length - 1];
+  const y = v => f.m.t + f.ih - (v / top) * f.ih;
+  yAxis(f, ticks, y, fmtAxis);
+  const band = f.iw / rows.length;
+  const barW = Math.min(24, (band * 0.7 - 2 * (series.length - 1)) / series.length);
+  const groupW = barW * series.length + 2 * (series.length - 1);
+  rows.forEach((r, i) => {
+    const gx = f.m.l + i * band + (band - groupW) / 2;
+    f.svg.append(el("text", { x: f.m.l + i * band + band / 2, y: f.height - 8, "text-anchor": "middle", class: "axis-text" }, groups(r)));
+    series.forEach((s, j) => {
+      const v = r[s.key];
+      if (v === null || v === undefined) return;
+      const bx = gx + j * (barW + 2), by = y(v), h = f.m.t + f.ih - by;
+      const g = el("g");
+      g.append(el("rect", { x: bx - 4, y: f.m.t, width: barW + 8, height: f.ih, fill: "transparent" }));
+      g.append(el("path", { class: "fill", d: roundedBar(bx, by, barW, h, "up"), fill: css(s.color) }));
+      if (labelValues) g.append(el("text", { x: bx + barW / 2, y: by - 5, "text-anchor": "middle", class: "value-text" }, fmtValue(v)));
+      bindMark(g, groups(r, true), series.map(t => ({ color: css(t.color), value: r[t.key] == null ? "–" : fmtValue(r[t.key]), label: t.label })));
+      f.svg.append(g);
+    });
+  });
+}
+
+function divergingBars(container, rows, ariaLabel) {
+  const rowH = 26, labelW = Math.min(210, Math.max(130, container.clientWidth * 0.3));
+  const f = frame(container, rows.length * rowH + 30, { t: 4, r: 44, b: 26, l: labelW });
+  f.svg.setAttribute("aria-label", ariaLabel);
+  const ext = Math.max(10, ...rows.map(r => Math.abs(r.avg_days_vs_terms ?? 0)));
+  const ticks = niceTicks(ext, 3), lim = ticks[ticks.length - 1];
+  const x = v => f.m.l + ((v + lim) / (2 * lim)) * f.iw;
+  for (const t of [...ticks.slice(1).map(v => -v).reverse(), ...ticks]) {
+    f.svg.append(el("line", { x1: x(t), x2: x(t), y1: f.m.t, y2: f.height - f.m.b,
+      stroke: t === 0 ? css("--axis") : css("--grid"), "stroke-width": 1 }));
+    f.svg.append(el("text", { x: x(t), y: f.height - 8, "text-anchor": "middle", class: "axis-text" }, (t > 0 ? "+" : "") + t + " d"));
+  }
+  rows.forEach((r, i) => {
+    const v = r.avg_days_vs_terms, cy = f.m.t + i * rowH;
+    const g = el("g");
+    g.append(el("rect", { x: 0, y: cy, width: f.width, height: rowH, fill: "transparent" }));
+    g.append(el("text", { x: f.m.l - 10, y: cy + rowH / 2 + 4, "text-anchor": "end", class: "label-text" }, r.customer));
+    if (v !== null) {
+      const late = v > 0, x0 = x(0), x1 = x(v), bh = Math.min(16, rowH - 8);
+      g.append(el("path", { class: "fill", fill: css(late ? "--late" : "--early"),
+        d: late ? roundedBar(x0, cy + (rowH - bh) / 2, x1 - x0, bh, "right") : roundedBar(x1, cy + (rowH - bh) / 2, x0 - x1, bh, "left") }));
+      g.append(el("text", { x: late ? x1 + 6 : x1 - 6, y: cy + rowH / 2 + 4, "text-anchor": late ? "start" : "end", class: "value-text" },
+        (v > 0 ? "+" : "") + v.toFixed(0) + " d"));
+    }
+    bindMark(g, r.customer, [
+      { value: v === null ? "–" : (v > 0 ? "+" : "") + v.toFixed(1) + " days", label: "vs. due date" },
+      { value: "Net " + (r.terms_days ?? "–"), label: "terms" },
+      { value: r.avg_days_to_pay === null ? "–" : r.avg_days_to_pay.toFixed(1) + " days", label: "invoice to cash" },
+      { value: (r.pct_paid_late ?? 0) + "%", label: "invoices paid late" },
+      { value: usd0.format(r.open_ar ?? 0), label: "open receivables" },
+    ]);
+    f.svg.append(g);
+  });
+}
+
+// ---------------------------------------------------------------- page
+function statusIcon(kind) {
+  const s = el("svg", { width: 14, height: 14, viewBox: "0 0 16 16", "aria-hidden": "true" });
+  if (kind === "good") s.append(el("path", { d: "M3 8.5l3 3 7-7", fill: "none", stroke: css("--good"), "stroke-width": 2.2, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+  else s.append(el("path", { d: "M8 2l6.5 12H1.5z", fill: "none", stroke: css("--critical"), "stroke-width": 1.8, "stroke-linejoin": "round" }),
+    el("path", { d: "M8 6.5v3.5M8 12v.2", stroke: css("--critical"), "stroke-width": 1.8, "stroke-linecap": "round" }));
+  return s;
+}
+
+function tile(parent, { label, value, note, hero, unit, status }) {
+  const t = el("div", { class: "tile" + (hero ? " hero" : "") });
+  t.append(el("div", { class: "label" }, label));
+  const v = el("div", { class: "value" }, value);
+  if (unit) v.append(el("span", { class: "unit" }, " " + unit));
+  t.append(v);
+  if (note) {
+    const n = el("div", { class: "note" });
+    if (status) { const st = el("span", { class: "status" }); st.append(statusIcon(status), document.createTextNode(note)); n.append(st); }
+    else n.textContent = note;
+    t.append(n);
+  }
+  parent.append(t);
+}
+
+function render() {
+  const k = DATA.kpis;
+  document.getElementById("asof").textContent =
+    `As of ${new Date(DATA.as_of + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} · ${k.deals_won} won deals since May 2026`;
+
+  const kpis = document.getElementById("kpis"); kpis.replaceChildren();
+  tile(kpis, { hero: true, label: "Median days from deal won to cash", value: String(k.median_days_won_to_cash ?? "–"), unit: "days",
+    note: "Salesforce close date to the payment that settled the invoice" });
+  tile(kpis, { label: "Bookings", value: compactUsd(k.bookings), note: "Won deal value, Salesforce" });
+  tile(kpis, { label: "Cash collected", value: compactUsd(k.collected), note: "Customer payments, Odoo" });
+  tile(kpis, { label: "Open receivables", value: compactUsd(k.open_ar), note: compactUsd(k.overdue_ar ?? 0) + " past due",
+    status: (k.overdue_ar ?? 0) > 0 ? "critical" : "good" });
+
+  const k2 = document.getElementById("kpis2"); k2.replaceChildren();
+  tile(k2, { label: "DSO", value: (k.dso_days ?? "–") + " days", note: "Open AR ÷ last 90 days of billings × 90" });
+  tile(k2, { label: "Invoices paid on time", value: (k.pct_paid_on_time ?? "–") + "%", note: "Of fully paid invoices" });
+  tile(k2, { label: "Deals reconciled CRM ↔ ERP", value: k.pct_deals_reconciled + "%",
+    note: (k.deals_won - Math.round(k.deals_won * k.pct_deals_reconciled / 100)) + " exceptions, see below",
+    status: k.pct_deals_reconciled >= 100 ? "good" : "critical" });
+  tile(k2, { label: "Open dead letters", value: String(k.open_dead_letters),
+    note: k.open_dead_letters ? `Need review · ${k.sync_runs} sync runs logged` : `None · ${k.sync_runs} sync runs logged`,
+    status: k.open_dead_letters ? "critical" : "good" });
+
+  // Monthly cash flow
+  const mSeries = [
+    { key: "bookings", label: "Bookings", color: "--series-1" },
+    { key: "billings", label: "Billings", color: "--series-2" },
+    { key: "collections", label: "Collections", color: "--series-3" },
+  ];
+  legend(document.getElementById("legend-monthly"), mSeries.map(s => ({ label: s.label, color: css(s.color) })));
+  lineChart(document.getElementById("chart-monthly"), DATA.monthly, mSeries, "Line chart of monthly bookings, billings and collections");
+  table(document.getElementById("table-monthly"), [
+    { label: "Month", get: r => monthLong(r.month) },
+    ...mSeries.map(s => ({ label: s.label, num: true, get: r => usd0.format(r[s.key]) })),
+  ], DATA.monthly);
+
+  // AR aging (one series: no legend; the title names it)
+  columnChart(document.getElementById("chart-aging"), DATA.aging, (r) => r.bucket,
+    [{ key: "amount_open", label: "open", color: "--series-1" }],
+    "Column chart of open receivables by days past due", compactUsd, compactUsd, true);
+  table(document.getElementById("table-aging"), [
+    { label: "Days past due", get: r => r.bucket },
+    { label: "Invoices", num: true, get: r => r.invoices },
+    { label: "Open amount", num: true, get: r => usd2.format(r.amount_open) },
+  ], DATA.aging);
+
+  // Cycle time
+  const cSeries = [
+    { key: "median_days_won_to_invoice", label: "Won → invoiced", color: "--series-1" },
+    { key: "median_days_invoice_to_cash", label: "Invoiced → paid", color: "--series-2" },
+  ];
+  legend(document.getElementById("legend-cycle"), cSeries.map(s => ({ label: s.label, color: css(s.color) })), "rect");
+  columnChart(document.getElementById("chart-cycle"), DATA.cycle, (r, long) => long ? monthLong(r.month) : monthName(r.month), cSeries,
+    "Grouped column chart of median days per order-to-cash stage by close month", v => v.toFixed(0) + " d", v => v + " d", false);
+  table(document.getElementById("table-cycle"), [
+    { label: "Close month", get: r => monthLong(r.month) },
+    { label: "Deals", num: true, get: r => r.deals },
+    { label: "Paid so far", num: true, get: r => r.deals_paid },
+    ...cSeries.map(s => ({ label: s.label + " (median days)", num: true, get: r => r[s.key] ?? "–" })),
+  ], DATA.cycle);
+
+  // Customers
+  legend(document.getElementById("legend-customers"), [
+    { label: "Paid early (before due date)", color: css("--early") },
+    { label: "Paid late", color: css("--late") }], "rect");
+  divergingBars(document.getElementById("chart-customers"), DATA.customers, "Diverging bar chart of average days paid before or after due date, by customer");
+  table(document.getElementById("table-customers"), [
+    { label: "Customer", get: r => r.customer },
+    { label: "Terms", num: true, get: r => "Net " + (r.terms_days ?? "–") },
+    { label: "Invoices paid", num: true, get: r => r.invoices_paid },
+    { label: "Avg days to pay", num: true, get: r => r.avg_days_to_pay ?? "–" },
+    { label: "Avg days vs. due", num: true, get: r => r.avg_days_vs_terms ?? "–" },
+    { label: "Paid late", num: true, get: r => (r.pct_paid_late ?? 0) + "%" },
+    { label: "Open AR", num: true, get: r => usd0.format(r.open_ar ?? 0) },
+  ], DATA.customers);
+
+  // Reconciliation
+  const reconWrap = document.getElementById("table-recon");
+  const summary = el("div"); table(summary, [
+    { label: "Check", get: r => r.check_status },
+    { label: "Deals", num: true, get: r => r.deals },
+    { label: "CRM amount", num: true, get: r => usd0.format(r.amount) },
+  ], DATA.recon_summary);
+  const exceptions = el("div", { style: "margin-top:12px" }); table(exceptions, [
+    { label: "Deal", get: r => r.opportunity_name },
+    { label: "Issue", get: r => { const p = el("span", { class: "pill" }, r.check_status); return p; } },
+    { label: "CRM", num: true, get: r => usd0.format(r.crm_amount) },
+    { label: "ERP", num: true, get: r => r.order_amount == null ? "–" : usd0.format(r.order_amount) },
+    { label: "Reason", get: r => r.dlq_reason ?? (r.check_status === "status not synced" ? `CRM ${r.crm_invoice_status ?? "empty"} vs ERP ${r.erp_status}` : "–") },
+  ], DATA.recon);
+  reconWrap.replaceChildren(summary, exceptions);
+
+  table(document.getElementById("table-dlq"), [
+    { label: "Stage", get: r => { const p = el("span", { class: "pill" }, r.stage); return p; } },
+    { label: "Deal", get: r => r.opportunity_name ?? "–" },
+    { label: "Error", get: r => r.error },
+    { label: "Tries", num: true, get: r => r.attempts },
+  ], DATA.dead_letters);
+}
+
+document.querySelectorAll(".toggle").forEach(btn => btn.addEventListener("click", () => {
+  const name = btn.dataset.target;
+  const chart = document.getElementById("chart-" + name), tbl = document.getElementById("table-" + name);
+  const showTable = tbl.hidden;
+  tbl.hidden = !showTable; chart.hidden = showTable;
+  const lg = document.getElementById("legend-" + name); if (lg) lg.hidden = showTable;
+  btn.textContent = showTable ? "Show chart" : "Show table";
+  btn.setAttribute("aria-pressed", String(showTable));
+}));
+
+render();
+let resizeTimer;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+</script>
+</body>
+</html>

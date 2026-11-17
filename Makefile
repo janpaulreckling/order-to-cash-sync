@@ -1,4 +1,4 @@
-.PHONY: install test lint up down seed-erp seed-crm finance sync status
+.PHONY: install test lint up down seed-erp seed-crm finance sync status analytics
 
 install:
 	uv sync
@@ -7,7 +7,7 @@ test:
 	uv run pytest
 
 lint:
-	uv run ruff check . && uv run mypy src
+	uv run ruff check . && uv run mypy src scripts analytics
 
 up:
 	docker compose up -d
@@ -29,3 +29,6 @@ sync:
 
 status:
 	uv run o2c status
+
+analytics:
+	uv run python analytics/build.py
