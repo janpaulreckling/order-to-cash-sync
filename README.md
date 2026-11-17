@@ -2,8 +2,12 @@
 
 > **Closed-won deals become ERP sales orders automatically, and invoice and payment status flow back to the sales rep, without anyone re-keying data.**
 
-[![CI](https://github.com/OWNER/order-to-cash-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/order-to-cash-sync/actions/workflows/ci.yml)
+[![CI](https://github.com/2zknf6t7d4-gif/order-to-cash-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/2zknf6t7d4-gif/order-to-cash-sync/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+
+![A deal won in Salesforce becomes an ERP order in one sync run; bad records are parked in the dead-letter queue](docs/img/demo.gif)
+
+*A real run against a Salesforce Developer Edition org and Odoo 17: a rep wins a deal, one `o2c sync` creates the ERP order and writes its status back, and the records the sync could not book wait in the dead-letter queue. Recorded with asciinema from [`scripts/demo.sh`](scripts/demo.sh).*
 
 ## The business problem
 
@@ -82,7 +86,7 @@ These are the parts I would want to discuss in a design review:
 Requires Python 3.11+, [uv](https://docs.astral.sh/uv/) and Docker.
 
 ```bash
-git clone https://github.com/OWNER/order-to-cash-sync && cd order-to-cash-sync
+git clone https://github.com/2zknf6t7d4-gif/order-to-cash-sync && cd order-to-cash-sync
 uv sync
 docker compose up -d          # Odoo 17 + Postgres
 uv run python scripts/seed_odoo.py   # company + product master from config/product_catalog.csv
@@ -135,6 +139,7 @@ scripts/
   seed_odoo.py                idempotent ERP setup for the local demo
   seed_salesforce.py          idempotent demo org: products, accounts, opportunities
   simulate_finance.py         confirm, invoice and pay orders in Odoo
+  demo.sh                     the scripted (but real) run in the GIF above
 src/o2c_sync/
   models.py                   canonical order model + business rules
   mapping.py                  config-driven mapper and transforms
@@ -159,4 +164,4 @@ tests/
 
 ## Related
 
-Part of a portfolio that models the back office of a fictional outdoor retailer, *Northwind Outfitters*. The invoices produced here feed the [cash-reconciliation-engine](https://github.com/OWNER/cash-reconciliation-engine).
+Part of a portfolio that models the back office of a fictional outdoor retailer, *Northwind Outfitters*. The invoices produced here feed the [cash-reconciliation-engine](https://github.com/2zknf6t7d4-gif/cash-reconciliation-engine).
