@@ -210,6 +210,29 @@ class OdooERP:
                       {"partner_id": int(customer_ref), "order_line": lines})
         self._reconcile_total(int(ref), order)
 
+    def order_matches(self, ref: str, order: SalesOrder) -> bool:
+        [so] = self._execute("sale.order", "read", [int(ref)], fields=["partner_id", "order_line"])
+        [partner] = self._execute("res.partner", "read", [so["partner_id"][0]], fields=["ref"])
+        if partner["ref"] != order.customer.external_id:
+            return False
+        rows = self._execute("sale.order.line", "read", so["order_line"],
+                             fields=["product_id", "product_uom_qty", "price_unit", "discount",
+                                     "display_type"]) if so["order_line"] else []
+        rows = [r for r in rows if not r.get("display_type")]  # skip section/note lines
+        product_ids = list({r["product_id"][0] for r in rows if r["product_id"]})
+        codes = {p["id"]: p["default_code"] for p in self._execute(
+            "product.product", "read", product_ids, fields=["default_code"])} if product_ids else {}
+
+        def key(sku: str, qty: Any, price: Any, disc: Any) -> tuple[str, Decimal, Decimal, Decimal]:
+            return (sku, Decimal(str(qty)).quantize(Decimal("0.001")),
+                    Decimal(str(price)).quantize(CENT), Decimal(str(disc)).quantize(CENT))
+
+        erp = sorted(key(codes.get(r["product_id"][0], ""), r["product_uom_qty"], r["price_unit"],
+                         r["discount"]) for r in rows if r["product_id"])
+        crm = sorted(key(line.sku, line.quantity, line.unit_price, line.discount_pct)
+                     for line in order.lines)
+        return erp == crm
+
     def list_status_changes(self, since: datetime | None) -> Iterator[ErpOrderStatus]:
         # Payments update the invoice (account.move), not the sale.order, so we
         # must watch both to notice "Paid".

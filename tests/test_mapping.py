@@ -15,7 +15,7 @@ def test_maps_salesforce_record_to_canonical_order(mapper: FieldMapper) -> None:
     assert order.currency == "USD"  # from defaults
     assert order.customer.billing_address.country_code == "US"  # "United States" -> US
     assert order.source_last_modified == datetime(2026, 11, 2, 14, 3, 11, tzinfo=UTC)
-    assert [line.sku for line in order.lines] == ["TENT-2P", "PACK-45L"]
+    assert [line.sku for line in order.lines] == ["PACK-45L", "TENT-2P"]  # canonical order
     assert order.total == Decimal("887.00")
 
 

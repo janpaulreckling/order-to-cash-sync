@@ -101,6 +101,12 @@ class SyncEngine:
         elif existing.editable:
             self.erp.update_order(existing.ref, order, customer_ref)
             ref, outcome = existing.ref, Outcome.UPDATED
+        elif self.erp.order_matches(existing.ref, order):
+            # Locked, but nothing business-relevant differs (e.g. only the deal
+            # name changed, or the hash predates a canonicalisation). Re-baseline
+            # the hash instead of parking a false conflict.
+            self.store.save_mapping("order", order.external_id, existing.ref, fingerprint)
+            return Outcome.SKIPPED
         else:
             # Conflict rule: once Finance confirms an order in the ERP, the ERP
             # is the system of record. CRM edits after that point need review.

@@ -3,11 +3,24 @@
 > **Closed-won deals become ERP sales orders automatically, and invoice and payment status flow back to the sales rep, without anyone re-keying data.**
 
 [![CI](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Salesforce](https://img.shields.io/badge/Salesforce-REST%20API-00A1E0?logo=salesforce&logoColor=white)
+![Odoo](https://img.shields.io/badge/Odoo-17-714B67?logo=odoo&logoColor=white)
+![DuckDB](https://img.shields.io/badge/DuckDB-SQL%20marts-FFF000?logo=duckdb&logoColor=black)
+![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI-2088FF?logo=githubactions&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey)
 
-![A deal won in Salesforce becomes an ERP order in one sync run; bad records are parked in the dead-letter queue](docs/img/demo.gif)
+**[Live dashboard](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/)** · [How it works](#what-it-does) · [Design decisions](#design-decisions)
 
-*A real run against a Salesforce Developer Edition org and Odoo 17: a rep wins a deal, one `o2c sync` creates the ERP order and writes its status back, and the records the sync could not book wait in the dead-letter queue. Recorded with asciinema from [`scripts/demo.sh`](scripts/demo.sh).*
+![A deal won in Salesforce is invoiced and paid in Odoo, and the next sync run shows Paid on the Salesforce opportunity](docs/img/ui_flow.gif)
+
+*Real screens from a Salesforce Developer Edition org and Odoo 17: the deal is won in Salesforce, Finance invoices and collects in the ERP, and the next sync run writes Paid back to the opportunity.*
+
+| At a glance | |
+|---|---|
+| **112** won deals synced to the ERP | **0** duplicate orders across repeated and lost-state runs |
+| **4** business rules enforced in code | **2** records parked for review, by design |
+| **45** tests, CI on Python 3.11 and 3.12 | **5** real bugs found by running against live systems |
 
 ## The business problem
 
@@ -44,6 +57,10 @@ flowchart LR
 4. **Write-back**: watches ERP invoices and payments and pushes `Not Invoiced → Invoiced → Partially Paid → Paid` plus the amount due onto the Opportunity.
 5. **Observe**: every run, failure and checkpoint is persisted, and failed records can be inspected and replayed.
 
+![One sync run in the terminal: a won deal becomes an ERP order, its status is written back, and bad records wait in the dead-letter queue](docs/img/demo.gif)
+
+*The same flow from the operator's side, recorded from [`scripts/demo.sh`](scripts/demo.sh).*
+
 ## What Finance and Sales see
 
 ![Order-to-cash dashboard](docs/img/dashboard.png)
@@ -59,7 +76,7 @@ The sync produces a joined-up record of every deal from *won* to *cash*, which n
 | Does every won deal exist in the ERP, with the same amount and status? | `crm_erp_reconciliation` |
 | What did the sync park for a human, and why? | `sync_health_dead_letters` |
 
-The dashboard ([`analytics/dashboard.html`](analytics/dashboard.html), one static file) has global filters (date range, customer, payment terms) that drive every chart, KPI deltas against the prior period with sparklines, and drill-down: clicking a period, aging bucket, status or customer filters the deal table, whose rows link to the Salesforce opportunity and the Odoo order. Receivables and DSO are rebuilt *as of* any date from invoice, payment and credit-note events, and they match the SQL marts to the cent.
+The dashboard ([live demo](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/), one static file built by `analytics/build.py`) has global filters (date range, customer, payment terms) that drive every chart, KPI deltas against the prior period with sparklines, and drill-down: clicking a period, aging bucket, status or customer filters the deal table, whose rows link to the Salesforce opportunity and the Odoo order. Receivables and DSO are rebuilt *as of* any date from invoice, payment and credit-note events, and they match the SQL marts to the cent.
 
 Two analyst details: billings net out credit notes (a reversed invoice is *Credited*, not *Paid*), and the cycle-time chart flags that recent months are right-censored, because only the fast payers have paid so far.
 
@@ -67,9 +84,9 @@ Two analyst details: billings net out credit notes (a reversed invoice is *Credi
 
 These are the parts I would want to discuss in a design review:
 
-**Idempotency at two levels.** Each order's canonical content is hashed (timestamps excluded). An unchanged record is skipped without an ERP call. The ERP is also searched by Salesforce ID before creating anything, so even with a wiped state database the sync updates instead of duplicating.
+**Idempotency at two levels.** Each order's canonical content is hashed (timestamps excluded). An unchanged record is skipped without an ERP call. Line items are sorted into a canonical order first: Salesforce returns child rows in no guaranteed order, and that alone once parked a paid order as a false conflict. The ERP is also searched by Salesforce ID before creating anything, so even with a wiped state database the sync updates instead of duplicating.
 
-**Conflict rule: after confirmation, the ERP wins.** While an order is a quotation (`draft`/`sent`), CRM changes flow through. Once Finance confirms it, the ERP is the system of record. A later CRM edit is *not* applied. It is parked as a `conflict` for human review, because silently changing a confirmed order is how revenue reports drift.
+**Conflict rule: after confirmation, the ERP wins.** While an order is a quotation (`draft`/`sent`), CRM changes flow through. Once Finance confirms it, the ERP is the system of record. A later CRM edit is *not* applied. It is parked as a `conflict` for human review, because silently changing a confirmed order is how revenue reports drift. Only business-relevant differences count (customer, SKUs, quantities, prices, discounts): before parking, the connector compares the CRM order with the lines actually in the ERP, so a renamed deal is not a conflict.
 
 **Bad records don't block good ones.** Validation failures, unknown SKUs and conflicts go to a **dead-letter queue** with the full source payload. The watermark still advances past them. After the root cause is fixed (e.g. the product is added to the ERP), `o2c dlq replay` re-processes them. A record that fails again updates its existing entry instead of creating duplicates.
 
@@ -87,6 +104,9 @@ These are the parts I would want to discuss in a design review:
 
 ## Quickstart
 
+<details>
+<summary>Run it locally (Docker, a free Salesforce Developer Edition org, about 15 minutes)</summary>
+
 Requires Python 3.11+, [uv](https://docs.astral.sh/uv/) and Docker.
 
 ```bash
@@ -103,12 +123,12 @@ uv run o2c sync
 uv run python scripts/simulate_finance.py  # Finance invoices and books payments in Odoo
 uv run o2c sync               # invoice/payment status flows back to Salesforce
 uv run o2c status
-uv sync --extra analytics && uv run python analytics/build.py   # extract -> SQL models -> dashboard
+uv sync --extra analytics && uv run python analytics/build.py   # extract -> SQL models -> analytics/dashboard.html
 ```
 
 Salesforce setup (free Developer Edition, OAuth via the Salesforce CLI, custom fields as deployable metadata): see [docs/salesforce_setup.md](docs/salesforce_setup.md).
 
-### CLI
+**CLI**
 
 | Command | Purpose |
 |---|---|
@@ -116,6 +136,8 @@ Salesforce setup (free Developer Edition, OAuth via the Salesforce CLI, custom f
 | `o2c status` | Watermarks, last runs, dead-letter backlog |
 | `o2c dlq list` | Unresolved failures with reason |
 | `o2c dlq replay` | Retry parked orders from stored payloads |
+
+</details>
 
 ## Testing
 
@@ -127,9 +149,18 @@ The engine is tested against in-memory fakes of both systems. The tests cover id
 
 The SQL models have their own tests on a small hand-checkable raw layer: credit notes are not cash, lost deals and draft invoices are excluded, aging buckets, and the reconciliation finding a missing deal along with its dead-letter reason.
 
-The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker: 7 won deals synced (open and lost deals filtered), the unknown SKU dead-lettered, Paid / Partially Paid / Invoiced written back, a CRM edit to a confirmed order parked as a conflict, and the rounding drift above caught and cleared after the fix in Salesforce.
+The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker. 112 won deals synced, with open and lost deals filtered out. Paid, Partially Paid, Invoiced and Credited were written back. A full rebuild from an empty ERP produced no duplicates. Running live surfaced five bugs that the fakes could not:
+
+1. Sub-cent unit prices after quantity edits, caught by the post-write total check.
+2. A reversed invoice that read as Paid. Credit notes are now netted.
+3. A failed write-back that could overwrite a parked order in the DLQ. The DLQ now has separate order and write-back lanes.
+4. Due dates that ignored payment terms, found by the analytics plausibility check.
+5. Line-item order that changed the hash and caused false conflicts on locked orders.
 
 ## Project layout
+
+<details>
+<summary>Where everything lives</summary>
 
 ```
 config/field_mapping.yaml     Salesforce → canonical mapping (reviewed like code)
@@ -157,6 +188,8 @@ src/o2c_sync/
   cli.py
 tests/
 ```
+
+</details>
 
 ## Roadmap
 

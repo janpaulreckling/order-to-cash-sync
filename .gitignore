@@ -14,3 +14,4 @@ dist/
 .sf/
 .sfdx/
 analytics/warehouse.duckdb*
+analytics/dashboard.html

@@ -3,7 +3,7 @@
 Usage: uv run python scripts/demo_new_deal.py
 """
 
-from datetime import date, datetime
+from datetime import date
 
 from seed_salesforce import connect, find_one
 
@@ -17,7 +17,11 @@ def main() -> None:
     account = find_one(sf, "SELECT Id, Name FROM Account WHERE Name = 'Pacific Crest Provisions'")
     std = find_one(sf, "SELECT Id FROM Pricebook2 WHERE IsStandard = true")
     assert account and std
-    name = f"Pacific Crest - Live Demo {datetime.now():%H:%M}"
+    # A realistic deal name; each recording takes the next free one.
+    base = "Pacific Crest - Spring Restock"
+    soql = f"SELECT Name FROM Opportunity WHERE Name LIKE '{base}%'"
+    taken = {r["Name"] for r in sf.query_all(soql)["records"]}
+    name = next(n for n in (base + s for s in ["", " II", " III", " IV", " V"]) if n not in taken)
     opp_id = sf.Opportunity.create({  # type: ignore[operator]
         "Name": name, "AccountId": account["Id"], "StageName": "Prospecting",
         "CloseDate": date.today().isoformat(), "Pricebook2Id": std["Id"]})["id"]

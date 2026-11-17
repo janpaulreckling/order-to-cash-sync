@@ -71,7 +71,8 @@ def test_change_after_erp_confirmation_is_a_conflict(make_engine, store) -> None
     assert stats.failed == 1
     [dead] = store.open_dead_letters()
     assert dead.stage == "conflict" and "locked" in dead.error
-    assert erp.orders[OPP_A]["order"].lines[0].quantity == 2  # ERP untouched
+    tent = next(ln for ln in erp.orders[OPP_A]["order"].lines if ln.sku == "TENT-2P")
+    assert tent.quantity == 2  # ERP untouched
 
 
 def test_bad_records_are_parked_and_do_not_block_others(make_engine, store) -> None:
@@ -228,3 +229,35 @@ def test_order_success_keeps_writeback_dead_letter_open(make_engine, store) -> N
 
     [dead] = store.open_dead_letters()
     assert dead.stage == "writeback"
+
+
+def test_line_order_from_salesforce_does_not_matter(make_engine) -> None:
+    # Found live: the child query has no guaranteed order, which used to change
+    # the hash and park a confirmed order as a false conflict.
+    crm = FakeCRM([opportunity(OPP_A, lines=[("TENT-2P", 2, 349.0), ("PACK-45L", 1, 189.0)])])
+    engine, erp = make_engine(crm)
+    engine.run()
+    erp.orders[OPP_A]["state"] = "sale"
+    crm.records = [opportunity(OPP_A, lines=[("PACK-45L", 1, 189.0), ("TENT-2P", 2, 349.0)],
+                               modified="2026-11-03T10:00:00.000+0000")]
+
+    stats = engine.run()
+
+    assert (stats.skipped, stats.failed) == (1, 0)
+
+
+def test_cosmetic_change_on_locked_order_is_not_a_conflict(make_engine, store) -> None:
+    crm = FakeCRM([opportunity(OPP_A)])
+    engine, erp = make_engine(crm)
+    engine.run()
+    erp.orders[OPP_A]["state"] = "sale"
+    renamed = opportunity(OPP_A, modified="2026-11-03T10:00:00.000+0000")
+    renamed["Name"] = "Renamed by the rep"
+    crm.records = [renamed]
+
+    stats = engine.run()
+    again = engine.run()  # hash was re-baselined: nothing to do
+
+    assert (stats.skipped, stats.failed) == (1, 0)
+    assert store.open_dead_letters() == []
+    assert erp.writes == 1 and again.failed == 0

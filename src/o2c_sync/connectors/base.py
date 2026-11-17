@@ -26,6 +26,11 @@ class ERPTarget(Protocol):
 
     def update_order(self, ref: str, order: SalesOrder, customer_ref: str) -> None: ...
 
+    def order_matches(self, ref: str, order: SalesOrder) -> bool:
+        """True if the ERP order already has this customer and these lines
+        (SKU, quantity, unit price, discount). Cosmetic fields don't count."""
+        ...
+
     def list_status_changes(self, since: datetime | None) -> Iterator[ErpOrderStatus]:
         """Orders whose invoicing/payment status changed at/after `since`, oldest first."""
         ...

@@ -66,7 +66,7 @@ def test_create_order_sends_lines_with_product_ids(odoo, mapper: FieldMapper) ->
     assert values["partner_id"] == 5
     assert values["client_order_ref"] == "006Hs00001AbCdEIAA"
     assert [(line[2]["product_id"], line[2]["product_uom_qty"]) for line in values["order_line"]] \
-        == [(7, 2.0), (8, 1.0)]
+        == [(8, 1.0), (7, 2.0)]  # canonical (SKU) order
 
 
 def test_unknown_sku_is_permanent(odoo, mapper: FieldMapper) -> None:

@@ -112,6 +112,13 @@ class FakeERP:
         self.orders[order.external_id]["order"] = order
         self.writes += 1
 
+    def order_matches(self, ref: str, order: SalesOrder) -> bool:
+        current: SalesOrder = self.orders[order.external_id]["order"]
+        def content(o: SalesOrder) -> tuple[object, ...]:
+            return (o.customer.external_id, sorted(
+                (ln.sku, ln.quantity, ln.unit_price, ln.discount_pct) for ln in o.lines))
+        return content(current) == content(order)
+
     def list_status_changes(self, since: datetime | None) -> Iterator[ErpOrderStatus]:
         yield from (s for s in self.statuses if since is None or s.updated_at >= since)
 

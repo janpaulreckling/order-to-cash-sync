@@ -133,10 +133,13 @@ class FieldMapper:
             customer = self._map_fields(record, spec["customer"])
 
             raw_lines = resolve(record, spec["line_items"]["path"]) or []
-            lines = [
-                OrderLine(**self._map_fields(raw, spec["line_items"]["fields"]))
-                for raw in raw_lines
-            ]
+            # Salesforce returns child rows in no guaranteed order. Sort them so the
+            # content hash (and the ERP line order) never depends on query order.
+            lines = sorted(
+                (OrderLine(**self._map_fields(raw, spec["line_items"]["fields"]))
+                 for raw in raw_lines),
+                key=lambda line: (line.sku, line.unit_price, line.quantity, line.discount_pct),
+            )
             return SalesOrder(
                 **order,
                 customer=Customer(**customer, billing_address=Address(**address)),
