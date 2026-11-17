@@ -67,6 +67,7 @@ Requires Python 3.11+, [uv](https://docs.astral.sh/uv/) and Docker.
 git clone https://github.com/OWNER/order-to-cash-sync && cd order-to-cash-sync
 uv sync
 docker compose up -d          # Odoo 17 + Postgres
+uv run python scripts/seed_odoo.py   # company + product master from config/product_catalog.csv
 cp .env.example .env          # add Salesforce Developer Edition credentials
 uv run o2c sync --dry-run     # validate mapping without writing
 uv run o2c sync
@@ -96,6 +97,8 @@ The engine is tested against in-memory fakes of both systems. The tests cover id
 
 ```
 config/field_mapping.yaml     Salesforce → canonical mapping (reviewed like code)
+config/product_catalog.csv    ERP product master (SKU = Odoo default_code)
+scripts/seed_odoo.py          idempotent ERP setup for the local demo
 src/o2c_sync/
   models.py                   canonical order model + business rules
   mapping.py                  config-driven mapper and transforms

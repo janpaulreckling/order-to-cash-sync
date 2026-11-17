@@ -1,4 +1,4 @@
-.PHONY: install test lint up down sync status
+.PHONY: install test lint up down seed-erp sync status
 
 install:
 	uv sync
@@ -14,6 +14,9 @@ up:
 
 down:
 	docker compose down
+
+seed-erp:
+	uv run python scripts/seed_odoo.py
 
 sync:
 	uv run o2c sync
