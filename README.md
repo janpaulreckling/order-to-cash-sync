@@ -1,24 +1,27 @@
-# Order-to-Cash Sync: Salesforce ↔ ERP
+# From won deal to paid invoice, automatically
+
+**order-to-cash-sync** · [Live dashboard](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/) · [How it works](#what-it-does) · [Design decisions](#design-decisions)
 
 > **When a salesperson wins a deal, this automatically creates the order and invoice in the accounting system, and shows the sales team when the customer has paid. No more retyping between Sales and Finance.**
 
-[![CI](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Salesforce](https://img.shields.io/badge/Salesforce-REST%20API-00A1E0?logo=salesforce&logoColor=white)
-![Odoo](https://img.shields.io/badge/Odoo-17-714B67?logo=odoo&logoColor=white)
-![DuckDB](https://img.shields.io/badge/DuckDB-SQL%20marts-FFF000?logo=duckdb&logoColor=black)
-![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI-2088FF?logo=githubactions&logoColor=white)
-![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey)
+**The story.** Northwind Outfitters sells camping and paddling gear to outdoor shops across the US.
+
+*Before:* every deal won in Salesforce was retyped by hand into the accounting system. Typos turned into wrong invoices, and sales reps kept asking Finance on Slack whether their customer had paid.
+
+*After:* the order and invoice appear in the ERP on their own, and the sales rep sees "Paid" on the deal as soon as the money arrives.
 
 | 1 · Deal won | → | 2 · Order and invoice | → | 3 · Paid |
 |:---:|:---:|:---:|:---:|:---:|
 | in **Salesforce** (CRM) | | created in the **ERP** (Odoo), where Finance bills and collects | | status shows up back in **Salesforce** for the sales rep |
 
-**[Live dashboard](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/)** · [How it works](#what-it-does) · [Design decisions](#design-decisions)
-
 ![A deal won in Salesforce is invoiced and paid in Odoo, and the next sync run shows Paid on the Salesforce opportunity](docs/img/ui_flow.gif)
 
-*Real screens from a Salesforce Developer Edition org and Odoo 17: the deal is won in Salesforce, Finance invoices and collects in the ERP, and the next sync run writes Paid back to the opportunity.*
+1. A sales rep wins the deal in Salesforce. The order is already waiting in the ERP, marked *Not Invoiced*.
+2. Finance sends the invoice from the ERP. Nobody retyped anything.
+3. The customer pays, and the ERP marks the invoice *Paid*.
+4. The next sync shows *Paid* and *$0.00 due* on the deal in Salesforce.
+
+*These are real screens from a Salesforce Developer Edition org and Odoo 17.*
 
 | At a glance | |
 |---|---|
@@ -83,6 +86,16 @@ The sync produces a joined-up record of every deal from *won* to *cash*, which n
 The dashboard ([live demo](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/), one static file built by `analytics/build.py`) has global filters (date range, customer, payment terms) that drive every chart, KPI deltas against the prior period with sparklines, and drill-down: clicking a period, aging bucket, status or customer filters the deal table, whose rows link to the Salesforce opportunity and the Odoo order. Receivables and DSO are rebuilt *as of* any date from invoice, payment and credit-note events, and they match the SQL marts to the cent.
 
 Two analyst details: billings net out credit notes (a reversed invoice is *Credited*, not *Paid*), and the cycle-time chart flags that recent months are right-censored, because only the fast payers have paid so far.
+
+## Built with
+
+[![CI](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Salesforce](https://img.shields.io/badge/Salesforce-REST%20API-00A1E0?logo=salesforce&logoColor=white)
+![Odoo](https://img.shields.io/badge/Odoo-17-714B67?logo=odoo&logoColor=white)
+![DuckDB](https://img.shields.io/badge/DuckDB-SQL%20marts-FFF000?logo=duckdb&logoColor=black)
+![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI-2088FF?logo=githubactions&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey)
 
 ## Design decisions
 
