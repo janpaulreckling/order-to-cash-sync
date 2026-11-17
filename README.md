@@ -1,6 +1,6 @@
 # Order-to-Cash Sync: Salesforce ↔ ERP
 
-> **Closed-won deals become ERP sales orders automatically, and invoice and payment status flow back to the sales rep, without anyone re-keying data.**
+> **When a salesperson wins a deal, this automatically creates the order and invoice in the accounting system, and shows the sales team when the customer has paid. No more retyping between Sales and Finance.**
 
 [![CI](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/janpaulreckling/order-to-cash-sync/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
@@ -10,6 +10,10 @@
 ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI-2088FF?logo=githubactions&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey)
 
+| 1 · Deal won | → | 2 · Order and invoice | → | 3 · Paid |
+|:---:|:---:|:---:|:---:|:---:|
+| in **Salesforce** (CRM) | | created in the **ERP** (Odoo), where Finance bills and collects | | status shows up back in **Salesforce** for the sales rep |
+
 **[Live dashboard](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/)** · [How it works](#what-it-does) · [Design decisions](#design-decisions)
 
 ![A deal won in Salesforce is invoiced and paid in Odoo, and the next sync run shows Paid on the Salesforce opportunity](docs/img/ui_flow.gif)
@@ -18,8 +22,8 @@
 
 | At a glance | |
 |---|---|
-| **112** won deals synced to the ERP | **0** duplicate orders across repeated and lost-state runs |
-| **4** business rules enforced in code | **2** records parked for review, by design |
+| **112** won deals turned into ERP orders automatically | **0** duplicate orders, even when a run is repeated |
+| **4** business rules enforced in code | **2** problem records held back for a person to review |
 | **45** tests, CI on Python 3.11 and 3.12 | **5** real bugs found by running against live systems |
 
 ## The business problem

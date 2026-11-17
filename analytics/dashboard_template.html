@@ -209,7 +209,7 @@ td.nowrap { white-space: nowrap; }
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l6-12 4 7 3-5 5 10z"/></svg>
       </div>
       <div>
-        <h1>Order-to-cash</h1>
+        <h1>How fast do won deals turn into cash, and what is overdue?</h1>
         <p class="sub" id="asof">Northwind Outfitters</p>
       </div>
     </div>
@@ -996,7 +996,7 @@ document.getElementById("theme").addEventListener("click", () => {
 });
 
 document.getElementById("asof").textContent =
-  `Northwind Outfitters · data as of ${dLong(AS_OF)} · ${deals.length} won deals since ${DATA_START.toLocaleString("en-US", { month: "long", year: "numeric" })}`;
+  `Order-to-cash for Northwind Outfitters · data as of ${dLong(AS_OF)} · ${deals.length} won deals since ${DATA_START.toLocaleString("en-US", { month: "long", year: "numeric" })}`;
 if (!DATA.links.salesforce) document.getElementById("deals-desc").textContent = "Every won deal from Salesforce to cash. In the live system each row links to the Salesforce opportunity and the Odoo order.";
 initFilters();
 render();
