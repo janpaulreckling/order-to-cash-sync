@@ -19,6 +19,8 @@ In most mid-market companies the handoff from Sales to Finance is a person with 
 | **Data-entry errors** | Wrong quantity or price leads to wrong invoice, credit note and an annoyed customer |
 | **No feedback loop** | Sales reps don't know whether their customer was invoiced or has paid, so they chase Finance on Slack |
 
+*How the numbers are built: these are planning assumptions, not measurements. 400 orders × 12.5 min ≈ 83 h of order entry a month. Plug in your own order volume and minutes per order; the error and feedback costs come on top.*
+
 This service replaces that handoff with an automated, auditable integration.
 
 ## What it does

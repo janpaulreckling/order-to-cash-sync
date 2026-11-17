@@ -14,8 +14,8 @@
   --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --ring: #2a78d6;
   --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
   --early: #2a78d6; --late: #e34948; --spark: #c3c2b7;
-  --stage-1: #86b6ef; --stage-2: #5598e7; --stage-3: #256abf; --stage-4: #104281;
-  --stage-ink-1: #0b0b0b; --stage-ink-2: #0b0b0b;
+  --stage-1: #86b6ef; --stage-2: #3987e5; --stage-3: #1c5cab; --stage-4: #0d366b;
+  --stage-ink-1: #0b0b0b; --stage-ink-2: #ffffff; --stage-ink-3: #ffffff; --stage-ink-4: #ffffff;
   --neutral-fill: #c3c2b7;
   --good: #0ca30c; --good-ink: #006300; --warning: #fab219; --warning-ink: #8a5a00;
   --critical: #d03b3b; --critical-ink: #b42e2e;
@@ -30,8 +30,8 @@
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --ring: #3987e5;
     --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
     --early: #3987e5; --late: #e66767; --spark: #5f5e59;
-    --stage-1: #184f95; --stage-2: #256abf; --stage-3: #5598e7; --stage-4: #9ec5f4;
-    --stage-ink-1: #ffffff; --stage-ink-2: #ffffff;
+    --stage-1: #184f95; --stage-2: #3987e5; --stage-3: #86b6ef; --stage-4: #cde2fb;
+    --stage-ink-1: #ffffff; --stage-ink-2: #ffffff; --stage-ink-3: #0b0b0b; --stage-ink-4: #0b0b0b;
     --neutral-fill: #5f5e59;
     --good: #0ca30c; --good-ink: #0ca30c; --warning: #fab219; --warning-ink: #fab219;
     --critical: #e66767; --critical-ink: #e66767;
@@ -46,8 +46,8 @@
   --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --ring: #3987e5;
   --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
   --early: #3987e5; --late: #e66767; --spark: #5f5e59;
-  --stage-1: #184f95; --stage-2: #256abf; --stage-3: #5598e7; --stage-4: #9ec5f4;
-  --stage-ink-1: #ffffff; --stage-ink-2: #ffffff;
+  --stage-1: #184f95; --stage-2: #3987e5; --stage-3: #86b6ef; --stage-4: #cde2fb;
+  --stage-ink-1: #ffffff; --stage-ink-2: #ffffff; --stage-ink-3: #0b0b0b; --stage-ink-4: #0b0b0b;
   --neutral-fill: #5f5e59;
   --good: #0ca30c; --good-ink: #0ca30c; --warning: #fab219; --warning-ink: #fab219;
   --critical: #e66767; --critical-ink: #e66767;
@@ -305,7 +305,7 @@ td.nowrap { white-space: nowrap; }
       <figure class="card span-12" id="deals-card">
         <div class="card-head">
           <div><h2>Deals</h2>
-            <p class="desc">Every won deal from Salesforce to cash. Links open the record in Salesforce or the local Odoo.</p></div>
+            <p class="desc" id="deals-desc">Every won deal from Salesforce to cash. Links open the record in Salesforce or the local Odoo.</p></div>
           <input class="search" id="search" type="search" placeholder="Search deal, customer, order" aria-label="Search deals">
         </div>
         <div class="chip-row" id="chips"></div>
@@ -412,8 +412,8 @@ for (const p of payments) (paymentsByMove[p.move_id] ||= []).push(p);
 for (const i of invoices) if (i.type === "out_refund" && i.reverses) (refundsByMove[i.reverses] ||= []).push(i);
 
 const STATUS = [
-  { key: "Paid", color: "--stage-4", ink: "#ffffff", icon: "check", tone: "good" },
-  { key: "Partially Paid", color: "--stage-3", ink: "#ffffff", icon: "clock", tone: "warn" },
+  { key: "Paid", color: "--stage-4", ink: "--stage-ink-4", icon: "check", tone: "good" },
+  { key: "Partially Paid", color: "--stage-3", ink: "--stage-ink-3", icon: "clock", tone: "warn" },
   { key: "Invoiced", color: "--stage-2", ink: "--stage-ink-2", icon: "clock" },
   { key: "Not Invoiced", color: "--stage-1", ink: "--stage-ink-1", icon: "dot" },
   { key: "Credited", color: "--neutral-fill", ink: "#0b0b0b", icon: "x" },
@@ -996,6 +996,7 @@ document.getElementById("theme").addEventListener("click", () => {
 
 document.getElementById("asof").textContent =
   `Northwind Outfitters · data as of ${dLong(AS_OF)} · ${deals.length} won deals since ${DATA_START.toLocaleString("en-US", { month: "long", year: "numeric" })}`;
+if (!DATA.links.salesforce) document.getElementById("deals-desc").textContent = "Every won deal from Salesforce to cash. In the live system each row links to the Salesforce opportunity and the Odoo order.";
 initFilters();
 render();
 let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });

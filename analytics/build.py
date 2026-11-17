@@ -3,6 +3,7 @@
     uv sync --extra analytics                   # DuckDB is not needed by the sync itself
     uv run python analytics/build.py            # extract + models + dashboard
     uv run python analytics/build.py --no-extract   # re-run models on the last extract
+    uv run python analytics/build.py --no-extract --public   # GitHub Pages copy, no internal links
 
 Extract (E/L): Salesforce REST, Odoo XML-RPC and the sync state DB land unchanged
 in DuckDB's `raw` schema. Transform (T): every file in analytics/models runs in
@@ -30,6 +31,9 @@ WAREHOUSE = HERE / "warehouse.duckdb"
 MODELS = HERE / "models"
 TEMPLATE = HERE / "dashboard_template.html"
 OUTPUT = HERE / "dashboard.html"
+# Public copy for GitHub Pages: same data, but no deep links into the private
+# Salesforce org or the localhost ERP (dead ends for visitors, and they expose hostnames).
+PUBLIC_OUTPUT = HERE.parent / "docs" / "dashboard" / "index.html"
 
 SF_SOQL = """
 SELECT Id, Name, AccountId, Account.Name, StageName, IsWon, IsClosed, Amount,
@@ -181,11 +185,12 @@ def query(con: duckdb.DuckDBPyConnection, sql: str) -> list[dict[str, Any]]:
     return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
 
 
-def render_dashboard(con: duckdb.DuckDBPyConnection) -> None:
+def render_dashboard(con: duckdb.DuckDBPyConnection, public: bool = False) -> None:
     meta = dict(con.execute("SELECT key, value FROM raw.meta").fetchall())
     data = {
         "as_of": date.today().isoformat(),
-        "links": {"salesforce": meta.get("salesforce_url"), "odoo": meta.get("odoo_url")},
+        "links": ({"salesforce": None, "odoo": None} if public else
+                  {"salesforce": meta.get("salesforce_url"), "odoo": meta.get("odoo_url")}),
         # Row-level facts for the interactive dashboard; it filters and aggregates
         # them in the browser. Definitions (status, cycle days, netting) stay in SQL.
         "deals": query(con, """
@@ -222,13 +227,17 @@ def render_dashboard(con: duckdb.DuckDBPyConnection) -> None:
         "dead_letters": query(con, "SELECT * FROM marts.sync_health_dead_letters"),
     }
     payload = json.dumps(data, default=_json_default).replace("</", "<\\/")
-    OUTPUT.write_text(TEMPLATE.read_text().replace("/*__DATA__*/null", payload))
-    print(f"dashboard: {OUTPUT.relative_to(HERE.parent)}")
+    out = PUBLIC_OUTPUT if public else OUTPUT
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(TEMPLATE.read_text().replace("/*__DATA__*/null", payload))
+    print(f"dashboard: {out.relative_to(HERE.parent)}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--no-extract", action="store_true", help="reuse the last extract")
+    parser.add_argument("--public", action="store_true",
+                        help="write the GitHub Pages copy without internal deep links")
     args = parser.parse_args()
 
     con = duckdb.connect(str(WAREHOUSE))
@@ -240,7 +249,7 @@ def main() -> None:
                        "meta": [("salesforce_url", sf_url), ("odoo_url", s.odoo_url)]})
     print("models:")
     run_models(con)
-    render_dashboard(con)
+    render_dashboard(con, public=args.public)
 
 
 if __name__ == "__main__":
