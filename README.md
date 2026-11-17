@@ -50,6 +50,7 @@ These are the parts I would want to discuss in a design review:
 
 **Business rules encoded, not assumed:**
 - Line items must sum to the Opportunity amount (±$0.01). No booking a deal Sales and Finance disagree on.
+- The same check runs again *after* the write: the connector reads the ERP order total back and dead-letters any mismatch. This was found against the real org: after a quantity edit over the API, Salesforce keeps the line total and stores an 8-decimal unit price, and Odoo rounds it to the cent. The pre-write check can't see that drift.
 - The ERP owns the product master: the sync never invents a SKU.
 - No silent currency conversion: an order whose currency differs from the ERP company currency is rejected.
 
@@ -68,13 +69,18 @@ git clone https://github.com/OWNER/order-to-cash-sync && cd order-to-cash-sync
 uv sync
 docker compose up -d          # Odoo 17 + Postgres
 uv run python scripts/seed_odoo.py   # company + product master from config/product_catalog.csv
-cp .env.example .env          # add Salesforce Developer Edition credentials
+cp .env.example .env
+sf org login web --alias northwind   # OAuth into a free Developer Edition org
+(cd salesforce && sf project deploy start -o northwind -d force-app && sf org assign permset -n O2C_Integration -o northwind)
+uv run python scripts/seed_salesforce.py   # products, accounts, won opportunities
 uv run o2c sync --dry-run     # validate mapping without writing
 uv run o2c sync
+uv run python scripts/simulate_finance.py  # Finance invoices and books payments in Odoo
+uv run o2c sync               # invoice/payment status flows back to Salesforce
 uv run o2c status
 ```
 
-Salesforce setup (free Developer Edition and four custom fields): see [docs/salesforce_setup.md](docs/salesforce_setup.md).
+Salesforce setup (free Developer Edition, OAuth via the Salesforce CLI, custom fields as deployable metadata): see [docs/salesforce_setup.md](docs/salesforce_setup.md).
 
 ### CLI
 
@@ -93,12 +99,18 @@ uv run pytest
 
 The engine is tested against in-memory fakes of both systems. The tests cover idempotency, lost-state recovery, conflict handling, poison records, DLQ replay, rate-limit abort and resume, dry-run and write-back de-duplication.
 
+The fakes are backed by end-to-end runs against a real Salesforce Developer Edition org and Odoo 17 in Docker: 7 won deals synced (open and lost deals filtered), the unknown SKU dead-lettered, Paid / Partially Paid / Invoiced written back, a CRM edit to a confirmed order parked as a conflict, and the rounding drift above caught and cleared after the fix in Salesforce.
+
 ## Project layout
 
 ```
 config/field_mapping.yaml     Salesforce → canonical mapping (reviewed like code)
 config/product_catalog.csv    ERP product master (SKU = Odoo default_code)
-scripts/seed_odoo.py          idempotent ERP setup for the local demo
+salesforce/force-app/         custom fields + permission set as deployable metadata
+scripts/
+  seed_odoo.py                idempotent ERP setup for the local demo
+  seed_salesforce.py          idempotent demo org: products, accounts, opportunities
+  simulate_finance.py         confirm, invoice and pay orders in Odoo
 src/o2c_sync/
   models.py                   canonical order model + business rules
   mapping.py                  config-driven mapper and transforms
@@ -115,7 +127,7 @@ tests/
 
 ## Roadmap
 
-- [ ] Seed script for a realistic Salesforce demo org
+- [x] Seed script for a realistic Salesforce demo org
 - [ ] Bulk API 2.0 path for initial backfills of >10k records
 - [ ] Prefect deployment with schedule and Slack alert on exit code ≠ 0
 - [ ] Sync-health dashboard (Power BI) on top of the state DB

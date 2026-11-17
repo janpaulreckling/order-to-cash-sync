@@ -17,6 +17,7 @@ class FakeOdoo:
         self.products, self.currency = products, currency
         self.calls: list[tuple[str, str, list[Any], dict[str, Any]]] = []
         self.fail_next: list[Exception] = []
+        self.last_lines: list[dict[str, Any]] = []
 
     def authenticate(self, *_: Any) -> int:
         return 2
@@ -34,7 +35,14 @@ class FakeOdoo:
         if method == "search":
             return []
         if method == "create":
+            if model == "sale.order":
+                self.last_lines = [line[2] for line in args[0]["order_line"]]
             return 42
+        if (model, method) == ("sale.order", "read"):
+            # Like Odoo: unit prices are stored with 2 decimals (Product Price precision).
+            total = sum(round(v["price_unit"], 2) * v["product_uom_qty"]
+                        * (1 - v["discount"] / 100) for v in self.last_lines)
+            return [{"amount_total": round(total, 2)}]
         if (model, method) == ("sale.order", "search_read"):
             return []
         raise AssertionError(f"unexpected call {model}.{method}")
@@ -65,6 +73,16 @@ def test_unknown_sku_is_permanent(odoo, mapper: FieldMapper) -> None:
     erp, _ = odoo
     order = mapper.to_sales_order(opportunity(lines=[("KAYAK-X", 1, 900.0)]))
     with pytest.raises(PermanentError, match="KAYAK-X"):
+        erp.create_order(order, "5")
+
+
+def test_erp_total_is_reconciled_after_write(odoo, mapper: FieldMapper) -> None:
+    # Seen live: after a quantity edit over the API, Salesforce keeps the line
+    # total and stores a sub-cent unit price; Odoo rounds it to the cent.
+    erp, _ = odoo
+    order = mapper.to_sales_order(opportunity(lines=[("PACK-45L", 21, 177.52380952)],
+                                              amount=3728.00))
+    with pytest.raises(PermanentError, match="ERP total 3727.92 differs from CRM total 3728.00"):
         erp.create_order(order, "5")
 
 

@@ -36,7 +36,9 @@ line_items:
     description: Product2.Name
     quantity: Quantity
     unit_price: UnitPrice
-    discount_pct: Discount
+    # New Developer Edition orgs have no OpportunityLineItem.Discount; negotiated
+    # prices arrive as UnitPrice. Orgs with the field: uncomment and add it to the SOQL.
+    # discount_pct: Discount
 
 defaults:
   currency: USD

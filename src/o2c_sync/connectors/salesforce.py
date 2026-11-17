@@ -3,7 +3,9 @@
 Write-back requires four custom fields on Opportunity; see docs/salesforce_setup.md.
 """
 
+import json
 import logging
+import subprocess
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any, TypeVar
@@ -29,7 +31,7 @@ SELECT Id, Name, Amount, CloseDate, LastModifiedDate,
        Account.Id, Account.Name, Account.Phone,
        Account.BillingStreet, Account.BillingCity, Account.BillingState,
        Account.BillingPostalCode, Account.BillingCountry,
-       (SELECT Quantity, UnitPrice, Discount, Product2.ProductCode, Product2.Name
+       (SELECT Quantity, UnitPrice, Product2.ProductCode, Product2.Name
           FROM OpportunityLineItems)
   FROM Opportunity
  WHERE IsWon = true{since_clause}
@@ -46,25 +48,53 @@ def soql_datetime(value: datetime) -> str:
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def sf_cli_session(target_org: str) -> Salesforce:
+    """Session from an org authorized with `sf org login web` (OAuth).
+
+    The Salesforce CLI stores and refreshes the OAuth tokens, so no password or
+    security token has to live in .env. Production would use the JWT bearer flow
+    with a dedicated integration user instead.
+    """
+    def sf_json(*args: str) -> dict[str, Any]:
+        out = subprocess.run(["sf", *args, "--target-org", target_org, "--json"],
+                             capture_output=True, text=True, check=True, timeout=60).stdout
+        result: dict[str, Any] = json.loads(out)["result"]
+        return result
+
+    try:
+        # `org display` refreshes the token but redacts it; `show-access-token` reveals it.
+        instance_url = sf_json("org", "display")["instanceUrl"]
+        token = sf_json("org", "auth", "show-access-token")["accessToken"]
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError) as exc:
+        hint = f"run `sf org login web --alias {target_org}`"
+        raise PermanentError(f"no Salesforce CLI session for org '{target_org}'; {hint}") from exc
+    return Salesforce(instance_url=instance_url, session_id=token)
+
+
 class SalesforceCRM:
     def __init__(
         self,
-        username: str,
-        password: str,
-        security_token: str,
-        domain: str = "login",
+        login: Callable[[], Salesforce],
         api_usage_ceiling: float = 0.8,
         max_retries: int = 5,
     ) -> None:
-        self._username, self._password = username, password
-        self._token, self._domain = security_token, domain
+        """`login` is called again whenever the session expires."""
+        self._login = login
         self._ceiling = api_usage_ceiling
         self._retry = retry_policy(max_retries)
         self._sf = self._login()
 
-    def _login(self) -> Salesforce:
-        return Salesforce(username=self._username, password=self._password,
-                          security_token=self._token, domain=self._domain)
+    @classmethod
+    def with_password(
+        cls, username: str, password: str, security_token: str, domain: str = "login",
+        **kwargs: Any,
+    ) -> "SalesforceCRM":
+        return cls(lambda: Salesforce(username=username, password=password,
+                                      security_token=security_token, domain=domain), **kwargs)
+
+    @classmethod
+    def with_sf_cli(cls, target_org: str, **kwargs: Any) -> "SalesforceCRM":
+        return cls(lambda: sf_cli_session(target_org), **kwargs)
 
     # ------------------------------------------------------------ guards
     def _check_api_budget(self) -> None:

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>ERP_Last_Sync__c</fullName>
+    <label>ERP Last Sync</label>
+    <type>DateTime</type>
+    <description>Time of the ERP status change last written back. Owned by the order-to-cash integration.</description>
+    <inlineHelpText>Set by the ERP sync. Do not edit.</inlineHelpText>
+    <required>false</required>
+</CustomField>

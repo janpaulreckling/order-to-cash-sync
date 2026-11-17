@@ -141,6 +141,18 @@ class OdooERP:
             for line in order.lines
         ]
 
+    def _reconcile_total(self, order_id: int, order: SalesOrder) -> None:
+        # Business rule, checked after the write: the ERP total must equal what
+        # Sales closed on. Catches what the CRM-side check can't see: ERP price
+        # rounding (Salesforce keeps 8-decimal unit prices), taxes, price rules.
+        [row] = self._execute("sale.order", "read", [order_id], fields=["amount_total"])
+        erp_total = Decimal(str(row["amount_total"])).quantize(CENT)
+        if abs(erp_total - order.total) > CENT:
+            raise PermanentError(
+                f"ERP total {erp_total} differs from CRM total {order.total} after write "
+                f"(sub-cent unit prices, taxes or ERP price rules?); order left as quotation"
+            )
+
     # --------------------------------------------------------- protocol
     def upsert_customer(self, customer: Customer) -> str:
         addr = customer.billing_address
@@ -178,13 +190,16 @@ class OdooERP:
             "origin": f"Salesforce: {order.name}",
             "order_line": self._order_lines(order),
         }
-        return str(self._execute("sale.order", "create", values))
+        order_id = int(self._execute("sale.order", "create", values))
+        self._reconcile_total(order_id, order)
+        return str(order_id)
 
     def update_order(self, ref: str, order: SalesOrder, customer_ref: str) -> None:
         # (5, 0, 0) clears existing lines; the CRM line set replaces it wholesale.
         lines: list[Any] = [(5, 0, 0), *self._order_lines(order)]
         self._execute("sale.order", "write", [int(ref)],
                       {"partner_id": int(customer_ref), "order_line": lines})
+        self._reconcile_total(int(ref), order)
 
     def list_status_changes(self, since: datetime | None) -> Iterator[ErpOrderStatus]:
         # Payments update the invoice (account.move), not the sale.order, so we

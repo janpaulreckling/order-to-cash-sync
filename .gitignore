@@ -10,3 +10,6 @@ htmlcov/
 *.db
 dist/
 .DS_Store
+.sf_secret*
+.sf/
+.sfdx/

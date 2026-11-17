@@ -35,16 +35,20 @@ def _engine(settings: Settings) -> SyncEngine:
     from o2c_sync.connectors.odoo import OdooERP
     from o2c_sync.connectors.salesforce import SalesforceCRM
 
-    if not (settings.sf_username and settings.sf_password and settings.sf_security_token):
+    limits = {"api_usage_ceiling": settings.sf_api_usage_ceiling,
+              "max_retries": settings.max_retries}
+    if settings.sf_cli_org:
+        crm = SalesforceCRM.with_sf_cli(settings.sf_cli_org, **limits)
+    elif settings.sf_username and settings.sf_password and settings.sf_security_token:
+        crm = SalesforceCRM.with_password(
+            settings.sf_username,
+            settings.sf_password.get_secret_value(),
+            settings.sf_security_token.get_secret_value(),
+            domain=settings.sf_domain,
+            **limits,
+        )
+    else:
         raise typer.BadParameter("Salesforce credentials missing; copy .env.example to .env")
-    crm = SalesforceCRM(
-        settings.sf_username,
-        settings.sf_password.get_secret_value(),
-        settings.sf_security_token.get_secret_value(),
-        domain=settings.sf_domain,
-        api_usage_ceiling=settings.sf_api_usage_ceiling,
-        max_retries=settings.max_retries,
-    )
     erp = OdooERP(settings.odoo_url, settings.odoo_db, settings.odoo_username,
                   settings.odoo_password.get_secret_value(), max_retries=settings.max_retries)
     return SyncEngine(crm, erp, FieldMapper.from_yaml(settings.mapping_path), _store(settings))

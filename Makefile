@@ -1,4 +1,4 @@
-.PHONY: install test lint up down seed-erp sync status
+.PHONY: install test lint up down seed-erp seed-crm finance sync status
 
 install:
 	uv sync
@@ -17,6 +17,12 @@ down:
 
 seed-erp:
 	uv run python scripts/seed_odoo.py
+
+seed-crm:
+	uv run python scripts/seed_salesforce.py
+
+finance:
+	uv run python scripts/simulate_finance.py
 
 sync:
 	uv run o2c sync

@@ -30,7 +30,6 @@ def opportunity(
             "attributes": {"type": "OpportunityLineItem"},
             "Quantity": qty,
             "UnitPrice": price,
-            "Discount": None,
             "Product2": {"attributes": {"type": "Product2"}, "ProductCode": sku, "Name": sku},
         }
         for sku, qty, price in lines

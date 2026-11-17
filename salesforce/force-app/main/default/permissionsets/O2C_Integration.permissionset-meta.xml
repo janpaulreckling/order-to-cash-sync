@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>O2C Integration</label>
+    <description>Lets the order-to-cash sync user write ERP status fields on Opportunity.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <fieldPermissions><field>Opportunity.ERP_Order_Ref__c</field><editable>true</editable><readable>true</readable></fieldPermissions>
+    <fieldPermissions><field>Opportunity.ERP_Invoice_Status__c</field><editable>true</editable><readable>true</readable></fieldPermissions>
+    <fieldPermissions><field>Opportunity.ERP_Amount_Due__c</field><editable>true</editable><readable>true</readable></fieldPermissions>
+    <fieldPermissions><field>Opportunity.ERP_Last_Sync__c</field><editable>true</editable><readable>true</readable></fieldPermissions>
+</PermissionSet>

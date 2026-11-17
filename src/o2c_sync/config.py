@@ -13,7 +13,9 @@ class Settings(BaseSettings):
     mapping_path: Path = Path("config/field_mapping.yaml")
     max_retries: int = 5
 
-    # Salesforce
+    # Salesforce: either an org alias authorized via `sf org login web` (OAuth,
+    # preferred locally) or username + password + security token.
+    sf_cli_org: str | None = None
     sf_username: str | None = None
     sf_password: SecretStr | None = None
     sf_security_token: SecretStr | None = None
