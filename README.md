@@ -29,9 +29,23 @@
 | **4** business rules enforced in code | **2** problem records held back for a person to review |
 | **45** tests, CI on Python 3.11 and 3.12 | **5** issues found by testing against live systems, all fixed |
 
+## What the data shows
+
+The dashboard answers one question: *how fast do won deals turn into cash, and what is overdue?* Three findings from the demo data, each with what Finance should do about it:
+
+1. **Four of twelve customers paid every settled invoice late, and they hold 28% of open receivables** ($66.6k of $234.8k). Hudson Valley Camping pays 43 days past due on average. *Action:* start dunning on day 1 past due for these four and review their credit limits.
+2. **One of them is a terms problem, not a customer problem.** Twin Cities Trailhead pays in 33 days, about as fast as the average customer (32 days), but its terms are 15 days, so every invoice shows as late. *Action:* align the terms with how the customer actually pays, or enforce them; chasing it like a bad payer would cost goodwill.
+3. **Time is lost in collections, not in billing.** The median deal is invoiced 5–6 days after it is won and paid 22–35 days after that (DSO 53 days). *Action:* work on collections; faster invoicing has little left to gain.
+
+And the check that makes the numbers trustworthy: **136 of 138 won deals match their ERP order** in amount and status. The other two were held back by the sync for a person to review, each with a reason.
+
+*About this data: the systems and the sync are real, but customers and their payment habits come from the [finance simulator](scripts/simulate_finance.py), which gives some customers a slow or late profile. The analysis finds those from the raw invoices and payments, plus one it was not told about (finding 2). It shows the method, not a real business.*
+
+**Where to look, by role:** Data Analyst → [dashboard](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/) and the findings above · Business Analyst → [business rules](#design-decisions) · Business Systems Analyst → [how the sync works](#what-it-does) · Analytics Engineer → [SQL models](analytics/models/).
+
 ## The business problem
 
-In most mid-market companies the handoff from Sales to Finance is a person with two browser tabs. A deal closes in Salesforce, and someone in Order Management re-types the customer, products, quantities and prices into the ERP. That step causes three problems:
+Without an integration, the handoff from Sales to Finance is a person with two browser tabs. A deal closes in Salesforce, and someone in Order Management re-types the customer, products, quantities and prices into the ERP. That step causes three problems:
 
 | Pain | Typical impact (illustrative, not measured) |
 |---|---|
@@ -42,6 +56,8 @@ In most mid-market companies the handoff from Sales to Finance is a person with 
 *How the numbers are built: these are planning assumptions, not measurements. 400 orders × 12.5 min ≈ 83 h of order entry a month. Plug in your own order volume and minutes per order; the error and feedback costs come on top.*
 
 This service replaces that handoff with an automated, auditable integration.
+
+**Why not buy a connector?** In a real company I would first look at the off-the-shelf options (Salesforce's own integrations, iPaaS tools like Celigo or MuleSoft). Either way, someone has to decide the same things: which system wins after an order is confirmed, what happens when line items don't add up to the deal amount, who reviews a rejected record. Those rules are the actual work, and they are written down and tested here. Building the sync end to end is how I show I understand what such a tool has to get right.
 
 ## What it does
 
@@ -83,7 +99,7 @@ The sync produces a joined-up record of every deal from *won* to *cash*, which n
 | Does every won deal exist in the ERP, with the same amount and status? | `crm_erp_reconciliation` |
 | What did the sync park for a human, and why? | `sync_health_dead_letters` |
 
-The dashboard ([live demo](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/), one static file built by `analytics/build.py`) has global filters (date range, customer, payment terms) that drive every chart, KPI deltas against the prior period with sparklines, and drill-down: clicking a period, aging bucket, status or customer filters the deal table, whose rows link to the Salesforce opportunity and the Odoo order. Receivables and DSO are rebuilt *as of* any date from invoice, payment and credit-note events, and they match the SQL marts to the cent.
+The dashboard ([live demo](https://janpaulreckling.github.io/order-to-cash-sync/dashboard/), one static file built by `analytics/build.py`) has global filters (date range, customer, payment terms) that drive every chart, KPI deltas against the prior period with sparklines, and drill-down: clicking a period, aging bucket, status or customer filters the deal table. In the local build its rows link to the Salesforce opportunity and the Odoo order; the public copy leaves the links out. Receivables and DSO are rebuilt *as of* any date from invoice, payment and credit-note events, and they match the SQL marts to the cent.
 
 Two analyst details: billings net out credit notes (a reversed invoice is *Credited*, not *Paid*), and the cycle-time chart flags that recent months are right-censored, because only the fast payers have paid so far.
 
